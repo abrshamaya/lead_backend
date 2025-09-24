@@ -1,0 +1,10 @@
+
+.venv
+.ignore
+venv
+__pycache__
+scraper/__pycache__/*
+scraper/__pycache__
+
+*.env
+test*
