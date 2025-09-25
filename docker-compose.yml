@@ -1,28 +1,36 @@
-version: "3.9"
 
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: lead_postgres
+    environment:
+      POSTGRES_USER: lead_user
+      POSTGRES_PASSWORD: lead_pass
+      POSTGRES_DB: lead_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"  # optional, for direct host access
+    restart: unless-stopped
+
   backend:
     container_name: lead_backend
-    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     build: ./AmayaLead
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     ports:
       - "8000:8000"
     volumes:
       - ./AmayaLead:/app
     depends_on:
-      - scraper
+      - db
     environment:
       DJANGO_ENV: prod
+      POSTGRES_USER: lead_user
+      POSTGRES_PASSWORD: lead_pass
+      POSTGRES_DB: lead_db
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
     restart: unless-stopped
 
-  scraper:
-    container_name: lead_scraper
-    command: sh -c "uvicorn main:app --reload --host 0.0.0.0 --port 8001"
-    build: ./FastAPI
-    ports:
-      - "8001:8001"
-    restart: unless-stopped
-    environment:
-       GOOGLE_PLACES_API: AIzaSyBPRKgGJrwA9H1lOHXNWQebZUbAaz8zotc
-    
-    
+volumes:
+  postgres_data:
