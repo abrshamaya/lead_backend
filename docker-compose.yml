@@ -10,8 +10,8 @@ services:
       - ./AmayaLead:/app
     depends_on:
       - scraper
-    enviroment:
-      - DJANGO_ENV: prod
+    environment:
+      DJANGO_ENV: prod
     restart: unless-stopped
 
   scraper:
@@ -20,5 +20,7 @@ services:
     build: ./FastAPI
     ports: 8001:8001
     restart: unless-stopped
+    environment:
+       GOOGLE_PLACES_API: AIzaSyBPRKgGJrwA9H1lOHXNWQebZUbAaz8zotc
     
     

@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y  postgresql-client  libpq-dev  gcc pyth
 COPY ./requirements.txt .
 
 RUN python -m pip install -r requirements.txt
-RUN playwright install
+RUN playwright install --with-deps
 
 WORKDIR /app
 
