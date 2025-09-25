@@ -9,7 +9,7 @@ from lead_types import HashablePlace
 from typing import List
 import traceback
 app = FastAPI()
-SCRAPER_TIMEOUT = 5
+SCRAPER_TIMEOUT = 100
 
 class ScrapeRequest(BaseModel):
     url: str
