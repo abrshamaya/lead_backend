@@ -6,12 +6,15 @@ from .core.places.places_api import fetch_places_by_query
 from rest_framework.response import Response
 from django.forms.models import model_to_dict
 from django.shortcuts import get_object_or_404
+import os
 import requests
 
 # Fast API Scraping servel URL
 
-
-SCRAPING_URL = 'http://127.0.0.1:8001'
+if os.getenv("DJANGO_ENV") != "prod":
+    SCRAPING_URL = 'http://127.0.0.1:8001'
+else:
+    SCRAPING_URL = 'http://scraper:8001'
 
 
 @api_view(['POST'])
