@@ -32,6 +32,8 @@ SECRET_KEY = 'django-insecure-p7t__)fmn@3u&q0$s9rmv)+8o9#kl2i+h0!_c#pckb&3w1oa2a
 DEBUG = True
 
 ALLOWED_HOSTS = [
+    'remedylead.app',
+    'www.remedylead.app',
     '135.181.99.162',
     'localhost'
 ]
@@ -84,7 +86,9 @@ TEMPLATES = [
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:8080',
-    'http://135.181.99.162:8080'
+    'http://135.181.99.162:8080',
+    'https://remedylead.app',
+    'https://www.remedylead.app'
 ]
 
 
