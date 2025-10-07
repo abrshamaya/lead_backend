@@ -1,6 +1,7 @@
 # fastapi_server.py
 from fastapi import FastAPI, HTTPException
 from places.places_api import fetch_places_by_query
+from AI.filter_emails import filter_emails
 from pydantic import BaseModel
 import sys
 import subprocess
@@ -53,7 +54,11 @@ def fetch_and_scrape_places(req: FetchRequest):
                     out, err = proc.communicate(timeout=SCRAPER_TIMEOUT)
                     result = json.loads(out)
                     if result.get("status", '') == 'ok':
-                        place['emails'] = result['emails']
+                        try:
+                            place['emails'] = filter_emails(place['displayName']['text'],result['emails'])
+                        except Exception as e:
+                            print("Error during validation", e)
+                            place['emails'] = result['emails']
                     else:
                         place['scrape_error'] = "Website Refused"
                 except subprocess.TimeoutExpired:
@@ -108,5 +113,21 @@ def scrape_places(req:PlacesRequest):
 
     return res
 
-    
+class EmailsReq(BaseModel):
+    business_name:str
+    emails: list[str]
 
+
+@app.post("/filter_email")
+def api_filter_emails(req: EmailsReq):
+    emails = req.emails
+    name = req.business_name
+
+    validated = []
+
+    try:
+        validated = filter_emails(name, emails)
+    except Exception as e:
+        print("Error during validation", e)
+        return []
+    return validated
