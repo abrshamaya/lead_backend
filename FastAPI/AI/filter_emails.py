@@ -52,7 +52,7 @@ def filter_emails(bussiness_name:str, emails: list[str]) -> list[str]:
       "Content-Type": "application/json"
     }
     payload = {
-      "model": "deepseek/deepseek-chat-v3.1",
+      "model": "deepseek/deepseek-chat-v3.1:free",
       "messages": [
         {
           "role": "system",
