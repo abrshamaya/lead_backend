@@ -6,6 +6,7 @@ from .core.places.places_api import fetch_places_by_query
 from rest_framework.response import Response
 from django.forms.models import model_to_dict
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 import os
 import requests
 
@@ -214,3 +215,43 @@ def delete_lead(req, place_id):
     lead.delete()
 
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+@api_view(['POST'])
+def filter_email(request):
+    # 1. Get the single Lead object
+    place_id = request.data.get("place_id", "")
+    lead = get_object_or_404(Lead.objects.prefetch_related('emails'), place_id=place_id)
+
+    # 2. Extract existing emails
+    lead_emails = [e.email for e in lead.emails.all()]
+
+    # 3. Get business name from request
+    business_name = lead.name 
+    if not business_name:
+        return Response({"error": "business_name is required"}, status=400)
+
+    # 4. Prepare payload for filtering service
+    payload = {
+        "business_name": business_name,
+        "emails": lead_emails
+    }
+
+    # 5. Call the internal API to filter emails
+    try:
+        resp = requests.post(f"{SCRAPING_URL}/filter_email", json=payload)
+        resp.raise_for_status()
+        filtered_emails = resp.json()  # expected to be a list of valid emails
+    except requests.RequestException as e:
+        return Response({"error": f"Failed to call filter service: {str(e)}"}, status=500)
+
+    # 6. Update lead emails in DB
+    with transaction.atomic():
+        # Clear existing emails
+        lead.emails.all().delete()
+
+        # Re-create filtered emails
+        for email in filtered_emails:
+            lead.emails.create(email=email)
+
+    # 7. Return simple success status
+    return Response({"status": "success"})
