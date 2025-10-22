@@ -11,10 +11,11 @@ async def main():
     website = sys.argv[1]
     depth = int(sys.argv[2])
     retries = int(sys.argv[3])
+    tmp_file = sys.argv[4] if len(sys.argv) == 5 else "tmp_file.txt"
 
     for attempt in range(1, retries + 1):
         try:
-            emails = await scrape_email(website, depth=depth,debug=False)
+            emails = await scrape_email(website, depth=depth, tmp_file=tmp_file,debug=False)
             print(json.dumps({"status": "ok", "emails": emails}),flush=True)
             return  # Success → exit main
         except Exception as e:

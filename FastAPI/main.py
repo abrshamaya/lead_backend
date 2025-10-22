@@ -4,6 +4,9 @@ from places.places_api import fetch_places_by_query
 from AI.filter_emails import filter_emails
 from pydantic import BaseModel
 import sys
+import tempfile
+import os
+import uuid
 import subprocess
 import json
 from lead_types import HashablePlace
@@ -20,7 +23,6 @@ class FetchRequest(BaseModel):
     query: str
     result_limit: int
 
-
 @app.post("/fetch_and_scrape_places")
 def fetch_and_scrape_places(req: FetchRequest):
     query = req.query
@@ -30,52 +32,77 @@ def fetch_and_scrape_places(req: FetchRequest):
         fetch_res: List[HashablePlace] = fetch_places_by_query(query, limit)
     except Exception as e:
         tb = traceback.extract_tb(sys.exc_info()[2])[-1]
-        filename = tb.filename
-        line_number = tb.lineno
-        return HTTPException(status_code=500, detail=f"{filename}:{line_number} {str(e)}")
-    res = []
-    if fetch_res:
-        res = [place.to_dict() for place in fetch_res]
+        return HTTPException(
+            status_code=500,
+            detail=f"{tb.filename}:{tb.lineno} {str(e)}"
+        )
 
+    res = [place.to_dict() for place in fetch_res]
 
     for place in res:
-        url = place['websiteUri']
+        url = place.get('websiteUri')
         place['emails'] = []
+
         if url:
+            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+            tmp_filename = tmp_file.name
+            tmp_file.close()
+
             try:
-                # Creating a scraping sub process
                 proc = subprocess.Popen(
-                   args=[sys.executable, '-m', 'scraper_worker', url, '1', '5'],
-                   text=True,
-                   stdout=subprocess.PIPE,
-                   stderr=subprocess.PIPE
+                    args=[sys.executable, '-m', 'scraper_worker', url, '1', '5', tmp_filename],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
                 )
+
                 try:
                     out, err = proc.communicate(timeout=SCRAPER_TIMEOUT)
                     result = json.loads(out)
-                    if result.get("status", '') == 'ok':
+
+                    if result.get("status") == "ok":
                         try:
-                            place['emails'] = filter_emails(place['displayName']['text'],result['emails'])
+                            place['emails'] = filter_emails(place['displayName']['text'], result['emails'])
                         except Exception as e:
-                            print("Error during validation", e)
+                            print("Error during validation:", e)
                             place['emails'] = result['emails']
                     else:
-                        place['scrape_error'] = "Website Refused"
+                        with open(tmp_filename, 'r', encoding='utf-8') as f:
+                            emails = [line.strip() for line in f if line.strip()]
+                        place['emails'] = emails
+                        if not emails:
+                            place['scrape_error'] = result.get("error", "No Email Found")
+
                 except subprocess.TimeoutExpired:
                     proc.kill()
-                    place['emails'] = []
-                    place['scrape_error'] = "Timeout Exceeded"
+                    with open(tmp_filename, 'r', encoding='utf-8') as f:
+                        emails = [line.strip() for line in f if line.strip()]
+                    place['emails'] = emails
+                    if not emails:
+                        place['scrape_error'] = "Timeout Exceeded"
+
+                except Exception as e:
+                    proc.kill()
+                    with open(tmp_filename, 'r', encoding='utf-8') as f:
+                        emails = [line.strip() for line in f if line.strip()]
+                    place['emails'] = emails
+                    if not emails:
+                        place['scrape_error'] = str(e)
+
             except Exception as e:
-                exc_type = type(e).__name__
-                # Get traceback info (last call frame where exception happened)
                 tb = traceback.extract_tb(sys.exc_info()[2])[-1]
-                filename = tb.filename
-                line_number = tb.lineno
-                return HTTPException(status_code=500, detail=f"{filename}:{line_number} {str(e)}")
+                return HTTPException(
+                    status_code=500,
+                    detail=f"{tb.filename}:{tb.lineno} {str(e)}"
+                )
+
+            finally:
+                if os.path.exists(tmp_filename):
+                    os.remove(tmp_filename)
         else:
             place['scrape_error'] = 'No Website Found'
-    return res
 
+    return res
 
 class PlacesRequest(BaseModel):
     places:list[list[str]]
@@ -143,24 +170,35 @@ def scrape_website(req:WebsiteReq):
     url = req.url
     if url:
         try:
+            tmp_filename = f"{uuid.uuid4()}.txt"
             proc = subprocess.Popen(
-                args = [sys.executable, '-m', 'scraper_worker', url,'1', '5'],
+                args = [sys.executable, '-m', 'scraper_worker', url,'1', '5', tmp_filename],
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
             try:
                 out, err = proc.communicate(timeout=SCRAPER_TIMEOUT)
-                print(out, err)
                 result = json.loads(out)
                 if result.get('status', '')=='ok':
                     emails = result['emails']
                     res.append(emails)
                 else:
-                    return HTTPException(status_code=500, detail=f"Failed to scrape with error: {result['error']}")
+                    proc.kill()
+                    with open(tmp_filename, 'r', encoding='utf-8') as f:
+                        res = [line.strip() for line in f if line.strip()]
+                    if not res:
+                        return HTTPException(status_code=500, detail=f"Failed to scrape with error: {result['error']}")
+            except subprocess.TimeoutExpired:
+                # Read the results of the temp file for any left overs
+                proc.kill()
+                with open(tmp_filename, 'r', encoding='utf-8') as f:
+                    res = [line.strip() for line in f if line.strip()]
             except Exception as e:
                 res = []
                 return HTTPException(status_code=500, detail=str(e))
+            finally:
+                os.remove(tmp_filename)
         except Exception as e:
             return HTTPException(status_code=500, detail=str(e))
             res = []
