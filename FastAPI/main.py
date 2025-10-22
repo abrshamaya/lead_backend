@@ -131,32 +131,33 @@ def scrape_places(req: PlacesRequest):
                 )
 
                 try:
-                    out, err = proc.communicate(timeout=2*SCRAPER_TIMEOUT)
+                    print("started")
+                    out, err = proc.communicate(timeout=1*SCRAPER_TIMEOUT)
                     result = json.loads(out)
+                    print(result,err)
 
                     if result.get("status") == "ok":
                         emails = result['emails']
                     else:
+                        print("Error: ", err)
                         with open(tmp_filename, 'r', encoding='utf-8') as f:
                             emails = [line.strip() for line in f if line.strip()]
 
                 except subprocess.TimeoutExpired:
                     proc.kill()
+                    print("Error", err)
                     with open(tmp_filename, 'r', encoding='utf-8') as f:
                         emails = [line.strip() for line in f if line.strip()]
 
                 except Exception:
                     proc.kill()
+                    print("Error", err)
                     with open(tmp_filename, 'r', encoding='utf-8') as f:
                         emails = [line.strip() for line in f if line.strip()]
 
-            except Exception:
-                emails = []
-
             finally:
                 if os.path.exists(tmp_filename):
-                    # os.remove(tmp_filename)
-                    pass
+                    os.remove(tmp_filename)
 
         res.append((place_id, emails))
 
