@@ -132,7 +132,7 @@ def scrape_places(req: PlacesRequest):
 
                 try:
                     print("started")
-                    out, err = proc.communicate(timeout=1*SCRAPER_TIMEOUT)
+                    out, err = proc.communicate(timeout=2*SCRAPER_TIMEOUT)
                     result = json.loads(out)
                     print(result, err)
 
