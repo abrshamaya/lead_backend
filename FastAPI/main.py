@@ -105,38 +105,60 @@ def fetch_and_scrape_places(req: FetchRequest):
     return res
 
 class PlacesRequest(BaseModel):
-    places:list[list[str]]
-@app.post("/scrape_places")
-def scrape_places(req:PlacesRequest):
+    places: list[list[str]]
 
+@app.post("/scrape_places")
+def scrape_places(req: PlacesRequest):
     res = []
     places = req.places
 
     for place in places:
         place_id, place_url = place
-        emails =[]
+        emails = []
+
         if place_url:
+            # Create a temporary file for the scraper to store results
+            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+            tmp_filename = tmp_file.name
+            tmp_file.close()
+
             try:
-                # Creating a scraping sub process
                 proc = subprocess.Popen(
-                   args=[sys.executable, '-m', 'scraper_worker', place_url, '1', '5'],
-                   text=True,
-                   stdout=subprocess.PIPE,
-                   stderr=subprocess.PIPE
+                    args=[sys.executable, '-m', 'scraper_worker', place_url, '1', '5', tmp_filename],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
                 )
+
                 try:
                     out, err = proc.communicate(timeout=SCRAPER_TIMEOUT)
                     result = json.loads(out)
-                    if result.get("status", '') == 'ok':
+
+                    if result.get("status") == "ok":
                         emails = result['emails']
+                    else:
+                        # No emails found → fallback to temp file
+                        with open(tmp_filename, 'r', encoding='utf-8') as f:
+                            emails = [line.strip() for line in f if line.strip()]
 
                 except subprocess.TimeoutExpired:
-                    emails =[]
-            except Exception as e:
-                emails =[]
+                    proc.kill()
+                    with open(tmp_filename, 'r', encoding='utf-8') as f:
+                        emails = [line.strip() for line in f if line.strip()]
+
+                except Exception:
+                    proc.kill()
+                    with open(tmp_filename, 'r', encoding='utf-8') as f:
+                        emails = [line.strip() for line in f if line.strip()]
+
+            except Exception:
+                emails = []
+
+            finally:
+                if os.path.exists(tmp_filename):
+                    os.remove(tmp_filename)
 
         res.append((place_id, emails))
-
 
     return res
 
