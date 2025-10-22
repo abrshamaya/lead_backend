@@ -1,5 +1,6 @@
 
 import re
+import os
 import requests
 from bs4 import BeautifulSoup, Comment
 from urllib.parse import urljoin, urlparse, urldefrag
@@ -89,7 +90,7 @@ def scrape_page(url: str, debug=False) -> tuple[set[str], set[str]]:
 
     return emails, links
 
-def extract_emails_recursive(start_url: str, max_depth: int = 2, debug=False) -> list[str]:
+def extract_emails_recursive(start_url: str, max_depth: int = 2, tmp_file='tmp_file.txt',debug=False) -> list[str]:
     visited = set()
     to_visit = {start_url}
     all_emails = set()
@@ -108,6 +109,11 @@ def extract_emails_recursive(start_url: str, max_depth: int = 2, debug=False) ->
                 print(f"[INFO] Crawling: {url}")
             emails, links = scrape_page(url, debug=debug)  
             all_emails |= {email.lower() for email in emails}
+            with open(tmp_file, 'w') as f:
+                for email in all_emails:
+                    f.write(f"{email}\n")
+                    f.flush()
+                    os.fsync(f.fileno())
 
             priority_links = sorted(links, key=lambda l: 0 if is_priority_link(l) else 1)
             next_to_visit |= {l for l in priority_links if l not in visited}

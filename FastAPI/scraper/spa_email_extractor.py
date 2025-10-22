@@ -1,11 +1,22 @@
-# Optimized SPA Email Extractor — skips images, videos, fonts, and ads for speed.
+
+# Optimized SPA Email Extractor — minimal clicking, route heuristics, skips images/videos/fonts/ads.
 # Maintains full compatibility with the existing scraper pipeline.
 
 import re
 from urllib.parse import urljoin, urlparse
 from playwright.async_api import async_playwright, Page
 from scraper.utils import EMAIL_PATTERN, OBFUSCATED_EMAIL_PATTERN, is_priority_link
+import os
 
+
+COMMON_EMAIL_ROUTES = [
+    "/contact", "/contact-us", "/get-in-touch", "/reach-us",
+    "/about", "/about-us", "/our-story", "/company", "/team",
+    "/support",
+    "/info", "/information", "/legal", "/partners", "/partnership", "/join-us",
+    "/feedback",
+    "/social"
+]
 
 async def extract_emails_from_page(page: Page, debug=False) -> set[str]:
     emails = set()
@@ -16,11 +27,9 @@ async def extract_emails_from_page(page: Page, debug=False) -> set[str]:
     except Exception:
         content, text = "", ""
 
-    # Normal + obfuscated emails
     emails.update(re.findall(EMAIL_PATTERN, content))
     emails.update(re.findall(EMAIL_PATTERN, text))
 
-    # Mailto links
     try:
         for element in await page.query_selector_all("a[href^='mailto:']"):
             href = await element.get_attribute("href")
@@ -29,7 +38,6 @@ async def extract_emails_from_page(page: Page, debug=False) -> set[str]:
     except Exception:
         pass
 
-    # Obfuscated forms like "user [at] domain [dot] com"
     for parts in re.findall(OBFUSCATED_EMAIL_PATTERN, text):
         emails.add(f"{parts[0]}@{parts[1]}.{parts[2]}")
 
@@ -37,7 +45,6 @@ async def extract_emails_from_page(page: Page, debug=False) -> set[str]:
         print(f"[DEBUG] Extracted {len(emails)} emails from page.")
 
     return emails
-
 
 
 async def extract_navigation_links(page: Page, base_url: str, debug=False) -> set[str]:
@@ -48,16 +55,18 @@ async def extract_navigation_links(page: Page, base_url: str, debug=False) -> se
             elements = await page.query_selector_all(selector)
             for a in elements[:limit] if limit else elements:
                 href = await a.get_attribute("href")
-                if href:
+                if href and not href.startswith("javascript:") and not href.startswith("#"):
                     links.add(urljoin(base_url, href))
         except Exception:
             pass
 
-    await extract_from("nav a[href]")
-    if not links:
-        await extract_from("header a[href]")
-    if not links:
-        await extract_from("a[href]", limit=50)
+    # Prioritize structural containers
+    await extract_from("nav a[href]")      # main nav
+    await extract_from("header a[href]")   # headers
+    await extract_from("footer a[href]")   # footers often have contact/info links
+    await extract_from("aside a[href]")    # sidebars
+    await extract_from("section a[href]")  # generic sections
+    await extract_from("a[href]", limit=100)  # fallback catch-all
 
     if debug:
         print(f"[DEBUG] Extracted {len(links)} navigation links.")
@@ -66,45 +75,24 @@ async def extract_navigation_links(page: Page, base_url: str, debug=False) -> se
 
 
 
-async def click_link_and_extract_emails(page: Page, relative_url: str, base_url: str, debug=False) -> set[str]:
+async def visit_url_and_extract_emails(page: Page, url: str, debug=False) -> set[str]:
     emails = set()
     try:
-        anchor = await page.query_selector(
-            f"a[href='{relative_url}'], a[href='{urljoin(base_url, relative_url)}']"
-        )
-        if not anchor:
-            if debug:
-                print(f"[WARN] No clickable link found for {relative_url}")
-            return emails
-
-        await anchor.click()
-        try:
-            await page.wait_for_load_state("networkidle", timeout=8000)
-        except Exception:
-            await page.wait_for_timeout(1500)
-
+        await page.goto(url, timeout=25000, wait_until="domcontentloaded")
+        await page.wait_for_load_state("networkidle")
         emails = await extract_emails_from_page(page, debug=debug)
-
-        # Return to main page fast
-        try:
-            await page.goto(base_url, timeout=20000, wait_until="domcontentloaded")
-        except Exception:
-            await page.wait_for_timeout(2000)
     except Exception as e:
         if debug:
-            print(f"[ERROR] Clicking link {relative_url}: {e}")
-
+            print(f"[ERROR] Visiting {url}: {e}")
     return emails
 
 
-async def spa_extract_emails_recursive(start_url: str, max_depth: int = 2, debug=False) -> list[str]:
+async def spa_extract_emails_recursive(start_url: str, max_depth: int = 2, tmp_file='tmp_file.txt', debug=False) -> list[str]:
     async with async_playwright() as p:
         browser = await p.chromium.launch(
-            headless=False,
+            headless=True,
             args=[
                 "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
             ],
@@ -123,8 +111,6 @@ async def spa_extract_emails_recursive(start_url: str, max_depth: int = 2, debug
                 await route.continue_()
 
         await page.route("**/*", block_resources)
-
-        # Timeouts
         page.set_default_timeout(15000)
         page.set_default_navigation_timeout(25000)
 
@@ -132,49 +118,55 @@ async def spa_extract_emails_recursive(start_url: str, max_depth: int = 2, debug
         all_emails = set()
         base_domain = urlparse(start_url).netloc
 
-        # Load the first page
-        try:
-            await page.goto(start_url, timeout=30000, wait_until="domcontentloaded")
-        except Exception:
-            if debug:
-                print("[WARN] Initial load failed, retrying slower.")
-            await page.goto(start_url, timeout=60000)
+        # Start with the main page
+        main_emails = await visit_url_and_extract_emails(page, start_url, debug)
+        all_emails.update(email.lower() for email in main_emails)
 
-        emails = await extract_emails_from_page(page, debug=debug)
-        all_emails.update(email.lower() for email in emails)
+        with open(tmp_file, "w", encoding='utf-8') as f:
+            for email in all_emails:
+                f.write(f"{email}\n")
+                f.flush()
+                os.fsync(f.fileno())
 
-        # Collect navigation links
-        to_visit = await extract_navigation_links(page, start_url, debug=debug)
+        # Collect initial links
+        to_visit = await extract_navigation_links(page, start_url, debug)
         to_visit = {link for link in to_visit if urlparse(link).netloc == base_domain}
+
+        # Add heuristic routes (contact/about/etc.)
+        to_visit.update(urljoin(start_url, route) for route in COMMON_EMAIL_ROUTES)
+
+        # Sort by priority
         priority_links = sorted(to_visit, key=lambda l: 0 if is_priority_link(l) else 1)
         relative_links = [urlparse(link).path for link in priority_links]
 
-        # Recursive scraping
+        # Recursive exploration
         for depth in range(max_depth):
             if debug:
                 print(f"\n[INFO] Depth {depth + 1}/{max_depth}")
 
             next_relative_links = []
             for rel_link in relative_links:
-                if rel_link in visited_urls:
+                full_url = urljoin(start_url, rel_link)
+                if full_url in visited_urls:
                     continue
-                visited_urls.add(rel_link)
+                visited_urls.add(full_url)
 
                 if debug:
-                    print(f"[INFO] Clicking and scraping: {rel_link}")
+                    print(f"[INFO] Visiting: {full_url}")
 
-                emails = await click_link_and_extract_emails(page, rel_link, start_url, debug=debug)
+                emails = await visit_url_and_extract_emails(page, full_url, debug=debug)
                 all_emails.update(email.lower() for email in emails)
+                with open(tmp_file, "w", encoding='utf-8') as f:
+                    for email in all_emails:
+                        f.write(f"{email}\n")
+                        f.flush()
+                        os.fsync(f.fileno())
+                # Collect new links without clicking
+                new_links = await extract_navigation_links(page, start_url, debug=debug)
+                new_links = {link for link in new_links if urlparse(link).netloc == base_domain}
 
-                links = await extract_navigation_links(page, start_url, debug=debug)
-                links = {link for link in links if urlparse(link).netloc == base_domain}
-
-                new_rel_links = [
-                    urlparse(link).path for link in links if urlparse(link).path not in visited_urls
-                ]
-                next_relative_links.extend(
-                    sorted(new_rel_links, key=lambda l: 0 if is_priority_link(l) else 1)
-                )
+                new_rel_links = [urlparse(link).path for link in new_links if urljoin(start_url, urlparse(link).path) not in visited_urls]
+                next_relative_links.extend(sorted(new_rel_links, key=lambda l: 0 if is_priority_link(l) else 1))
 
             if not next_relative_links:
                 if debug:
