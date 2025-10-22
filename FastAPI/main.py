@@ -131,3 +131,38 @@ def api_filter_emails(req: EmailsReq):
         print("Error during validation", e)
         return []
     return validated
+
+
+class WebsiteReq(BaseModel):
+    url: str
+
+
+@app.post("/scrape")
+def scrape_website(req:WebsiteReq):
+    res = []
+    url = req.url
+    if url:
+        try:
+            proc = subprocess.Popen(
+                args = [sys.executable, '-m', 'scraper_worker', url,'1', '5'],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            try:
+                out, err = proc.communicate(timeout=SCRAPER_TIMEOUT)
+                print(out, err)
+                result = json.loads(out)
+                if result.get('status', '')=='ok':
+                    emails = result['emails']
+                    res.append(emails)
+                else:
+                    return HTTPException(status_code=500, detail=f"Failed to scrape with error: {result['error']}")
+            except Exception as e:
+                res = []
+                return HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            return HTTPException(status_code=500, detail=str(e))
+            res = []
+
+    return res

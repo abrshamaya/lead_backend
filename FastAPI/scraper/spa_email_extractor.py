@@ -90,7 +90,7 @@ async def click_link_and_extract_emails(page: Page, relative_url: str, base_url:
         await anchor.click()
 
         try:
-            await page.wait_for_load_state("networkidle", timeout=5000)
+            await page.wait_for_load_state("documentloaded", timeout=5000)
         except Exception:
             await page.wait_for_timeout(2000)
 
@@ -98,7 +98,7 @@ async def click_link_and_extract_emails(page: Page, relative_url: str, base_url:
 
         await page.goto(base_url,timeout=40000)
         try:
-            await page.wait_for_load_state("networkidle")
+            await page.wait_for_load_state("documentloaded")
         except:
             await page.wait_for_timeout(2000)
     except Exception as e:
@@ -118,7 +118,7 @@ async def spa_extract_emails_recursive(start_url: str, max_depth: int = 2, debug
 
         await page.goto(start_url,timeout=40000)
         try:
-            await page.wait_for_load_state("networkidle", timeout=5000)
+            await page.wait_for_load_state("documentloaded", timeout=5000)
         except:
             await page.wait_for_timeout(2000)
 
