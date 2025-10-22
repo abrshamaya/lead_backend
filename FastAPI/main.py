@@ -155,7 +155,8 @@ def scrape_places(req: PlacesRequest):
 
             finally:
                 if os.path.exists(tmp_filename):
-                    os.remove(tmp_filename)
+                    # os.remove(tmp_filename)
+                    pass
 
         res.append((place_id, emails))
 
