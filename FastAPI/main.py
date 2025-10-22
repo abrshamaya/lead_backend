@@ -62,7 +62,7 @@ def fetch_and_scrape_places(req: FetchRequest):
 
                     if result.get("status") == "ok":
                         try:
-                            place['emails'] = filter_emails(place['displayName']['text'], result['emails'])
+                            place['emails'] = result['emails']
                         except Exception as e:
                             print("Error during validation:", e)
                             place['emails'] = result['emails']
