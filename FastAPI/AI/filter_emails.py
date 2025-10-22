@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import re
 from dotenv import load_dotenv
 
 SYSTEM_PROMPT = """
@@ -26,6 +27,7 @@ Formatting Requirements:
 - Output only the valid emails that match the business.
 - Maintain the same format as the input (e.g., JSON list).
 - Do not include explanations or commentary unless explicitly requested.
+- DO NOT INCLUDE ANY OTHER ADDITIONAL SPACES, CHARACTERS such as colon, spaces
 
 Examples:
 
@@ -52,7 +54,7 @@ def filter_emails(bussiness_name:str, emails: list[str]) -> list[str]:
       "Content-Type": "application/json"
     }
     payload = {
-      "model": "deepseek/deepseek-chat-v3.1:free",
+      "model": "deepseek/deepseek-v3.2-exp",
       "messages": [
         {
           "role": "system",
@@ -81,6 +83,5 @@ def filter_emails(bussiness_name:str, emails: list[str]) -> list[str]:
     else:
         content = "[]"
     content = content.replace("'", '"')
-    result = json.loads(content)
-
-    return result
+    content = re.findall(r'"(.*?)"', content)
+    return content

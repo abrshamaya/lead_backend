@@ -90,12 +90,14 @@ async def visit_url_and_extract_emails(page: Page, url: str, debug=False) -> set
 async def spa_extract_emails_recursive(start_url: str, max_depth: int = 2, tmp_file='tmp_file.txt', debug=False) -> list[str]:
     async with async_playwright() as p:
         browser = await p.chromium.launch(
-            headless=True,
+            headless=False,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
-            ],
+                "--ignore-certificate-errors",  # ignore SSL errors
+                "--allow-insecure-localhost",   # allow self-signed certs on localhost
+               ],
         )
         page = await browser.new_page()
 

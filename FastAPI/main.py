@@ -131,13 +131,12 @@ def scrape_places(req: PlacesRequest):
                 )
 
                 try:
-                    out, err = proc.communicate(timeout=SCRAPER_TIMEOUT)
+                    out, err = proc.communicate(timeout=2*SCRAPER_TIMEOUT)
                     result = json.loads(out)
 
                     if result.get("status") == "ok":
                         emails = result['emails']
                     else:
-                        # No emails found → fallback to temp file
                         with open(tmp_filename, 'r', encoding='utf-8') as f:
                             emails = [line.strip() for line in f if line.strip()]
 
