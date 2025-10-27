@@ -35,7 +35,8 @@ ALLOWED_HOSTS = [
     'remedylead.app',
     'www.remedylead.app',
     '135.181.99.162',
-    'localhost'
+    'localhost',
+    '127.0.0.1'
 ]
 
 
