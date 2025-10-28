@@ -16,10 +16,8 @@ from lead_types import HashablePlace
 from typing import List
 import traceback
 app = FastAPI()
-# SCRAPER_TIMEOUT = 100
+SCRAPER_TIMEOUT = 100
 #
-# # Debug
-SCRAPER_TIMEOUT = 10
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -36,7 +34,7 @@ def normalize_hours(data):
     return ', '.join(result_parts)
 
 load_dotenv()
-USE_APIFY = os.getenv("USE_APIFY", "false").lower() == "true"
+USE_APIFY = os.getenv("USE_APIFY", "true").lower() == "true"
 
 
 class ScrapeRequest(BaseModel):
