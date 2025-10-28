@@ -130,6 +130,7 @@ def fetch_and_scrape(request):
             status=status.HTTP_201_CREATED
         )
     except Exception as e:
+        print(str(e))
         return Response(
             {"error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR

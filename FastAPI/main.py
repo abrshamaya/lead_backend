@@ -16,8 +16,9 @@ from lead_types import HashablePlace
 from typing import List
 import traceback
 app = FastAPI()
+
 SCRAPER_TIMEOUT = 100
-#
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -68,10 +69,10 @@ def fetch_and_scrape_places(req: FetchRequest):
                 place_obj = HashablePlace({
                     'displayName': {'text': place_data.get('business_name', ''), 'languageCode': 'en'},
                     'place_id': place_data.get("placeId"),
-                    'websiteUri': place_data.get('websiteUri'),
-                    'nationalPhoneNumber': place_data.get('phone_number'),
-                    'internationalPhoneNumber': place_data.get('phone_number'),
-                    'formattedAddress': place_data.get('address'),
+                    'websiteUri': place_data.get('websiteUri',''),
+                    'nationalPhoneNumber': place_data.get('phone_number', ''),
+                    'internationalPhoneNumber': place_data.get('international_phone_number',''),
+                    'formattedAddress': place_data.get('address', ''),
                     'types': place_data.get('business_types', []),
                     'weeklyOpeningHours': normalize_hours(place_data.get('opening_hours', '')),
                 })
