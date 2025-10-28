@@ -32,7 +32,7 @@ def map_apify_place(p: Dict[str, Any]) -> Dict[str, Any]:
         "business_types": [p.get("category")] if p.get("category") else [],
     }
 
-def fetch_places_by_query_via_apify(search_term: str, state: str = "", zipcode: str = "", limit: int = 20) -> List[Dict[str, Any]]:
+def fetch_places_by_query_via_apify(search_term: str, state: str = "",county:str="", zipcode: str = "", limit: int = 20) -> List[Dict[str, Any]]:
     """
     Fetch places using Apify Google Maps Scraper.
     
@@ -40,6 +40,7 @@ def fetch_places_by_query_via_apify(search_term: str, state: str = "", zipcode: 
         search_term: Business type or name to search for
         state: State name (optional)
         zipcode: ZIP code (optional)
+        county: Count name (optional)
         limit: Maximum number of places to return
         
     Returns:
@@ -73,6 +74,7 @@ def fetch_places_by_query_via_apify(search_term: str, state: str = "", zipcode: 
         "locationQuery": f"{state}, USA",
         "postalCode": zipcode,
         "state": state,
+        "county": county,
         "maxCrawledPlacesPerSearch": int(limit),
         "language": "en",
         "includeRawResults": False,

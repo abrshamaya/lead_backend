@@ -1,4 +1,3 @@
-# fastapi_server.py
 from fastapi import FastAPI, HTTPException
 from places.places_api import fetch_places_by_query
 from AI.filter_emails import filter_emails
@@ -50,19 +49,21 @@ class FetchRequest(BaseModel):
     result_limit: int
     state:Optional[str] = None
     zipcode:Optional[str] = None
+    county:Optional[str] = None
 
 @app.post("/fetch_and_scrape_places")
 def fetch_and_scrape_places(req: FetchRequest):
     searchTerm = req.searchTerm
     query = req.query
     limit = req.result_limit if req.result_limit else 1
-    state = req.state
-    zipcode = req.zipcode
+    state = req.state if req.state else ""
+    county = req.county if req.county else ""
+    zipcode = req.zipcode if req.zipcode else ""
     fetch_res = []
     try:
         if USE_APIFY:
-            logger.info(f"Using Apify provider for query: '{searchTerm}', state: '{state}', zipcode: '{zipcode}', limit: {limit}")
-            apify_results = fetch_places_by_query_via_apify(searchTerm, state, zipcode, limit)
+            logger.info(f"Using Apify provider for query: '{searchTerm}', state: '{state}', county: {county}, zipcode: '{zipcode}', limit: {limit}")
+            apify_results = fetch_places_by_query_via_apify(searchTerm, state,county, zipcode, limit)
             fetch_res = []
             for place_data in apify_results:
                 # Create a HashablePlace-compatible object
