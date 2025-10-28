@@ -2,34 +2,83 @@
 from fastapi import FastAPI, HTTPException
 from places.places_api import fetch_places_by_query
 from AI.filter_emails import filter_emails
+from providers.apify_fetch import fetch_places_by_query_via_apify
 from pydantic import BaseModel
 import sys
 import tempfile
+import logging
+from typing import Optional
 import os
 import uuid
 import subprocess
+from dotenv import load_dotenv
 import json
 from lead_types import HashablePlace
 from typing import List
 import traceback
 app = FastAPI()
-SCRAPER_TIMEOUT = 100
+# SCRAPER_TIMEOUT = 100
+#
+# # Debug
+SCRAPER_TIMEOUT = 10
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def normalize_hours(data):
+    result_parts = []
+    for entry in data:
+        day = entry['day']
+        hours = entry['hours']
+        if 'closed' in hours.lower():
+            formatted = f"{day}: Closed"
+        else:
+            formatted = f"{day}: 11:00 AM – 11:00 PM"
+        result_parts.append(formatted)
+    return ', '.join(result_parts)
+
+load_dotenv()
+USE_APIFY = os.getenv("USE_APIFY", "false").lower() == "true"
+
 
 class ScrapeRequest(BaseModel):
     url: str
 
 
 class FetchRequest(BaseModel):
+    searchTerm:str
     query: str
     result_limit: int
+    state:Optional[str] = None
+    zipcode:Optional[str] = None
 
 @app.post("/fetch_and_scrape_places")
 def fetch_and_scrape_places(req: FetchRequest):
+    searchTerm = req.searchTerm
     query = req.query
     limit = req.result_limit if req.result_limit else 1
+    state = req.state
+    zipcode = req.zipcode
     fetch_res = []
     try:
-        fetch_res: List[HashablePlace] = fetch_places_by_query(query, limit)
+        if USE_APIFY:
+            logger.info(f"Using Apify provider for query: '{searchTerm}', state: '{state}', zipcode: '{zipcode}', limit: {limit}")
+            apify_results = fetch_places_by_query_via_apify(searchTerm, state, zipcode, limit)
+            fetch_res = []
+            for place_data in apify_results:
+                # Create a HashablePlace-compatible object
+                place_obj = HashablePlace({
+                    'displayName': {'text': place_data.get('business_name', ''), 'languageCode': 'en'},
+                    'place_id': place_data.get("placeId"),
+                    'websiteUri': place_data.get('websiteUri'),
+                    'nationalPhoneNumber': place_data.get('phone_number'),
+                    'internationalPhoneNumber': place_data.get('phone_number'),
+                    'formattedAddress': place_data.get('address'),
+                    'types': place_data.get('business_types', []),
+                    'weeklyOpeningHours': normalize_hours(place_data.get('opening_hours', '')),
+                })
+                fetch_res.append(place_obj)
+        else:
+            fetch_res: List[HashablePlace] = fetch_places_by_query(query, limit)
     except Exception as e:
         tb = traceback.extract_tb(sys.exc_info()[2])[-1]
         return HTTPException(
@@ -39,6 +88,7 @@ def fetch_and_scrape_places(req: FetchRequest):
 
     res = [place.to_dict() for place in fetch_res]
 
+    logger.info(f"The length of places found is {len(res)}")
     for place in res:
         url = place.get('websiteUri')
         place['emails'] = []

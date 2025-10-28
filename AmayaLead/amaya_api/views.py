@@ -48,6 +48,9 @@ def fetch_and_scrape(request):
     """
     data = request.data
     query = data.get("query", "")
+    searchTerm = data.get("searchTerm", "")
+    zipcode = data.get("zipcode", "")
+    state = data.get("state", "")
 
     if not query:
         return Response(
