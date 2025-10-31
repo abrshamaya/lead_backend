@@ -39,6 +39,22 @@ services:
     ports:
       - "8001:8001"
     restart: unless-stopped
+  qcluster:
+    container_name: lead_cluster
+    command: sh -c "python manage.py qcluster"
+    build: ./AmayaLead
+    depends_on:
+      - db
+      - scraper
+    restart: unless-stopped
+    environment:
+      DJANGO_ENV: prod
+      POSTGRES_USER: lead_user
+      POSTGRES_PASSWORD: lead_pass
+      POSTGRES_DB: lead_db
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    
 
 volumes:
   postgres_data:
