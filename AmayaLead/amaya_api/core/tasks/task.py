@@ -8,7 +8,6 @@ if os.getenv("DJANGO_ENV") != "prod":
 else:
     SCRAPING_URL = 'http://scraper:8001'
 
-    
 def fetch_and_scrape_task(data):
     """
         Fetches places and scrapes them
@@ -19,7 +18,7 @@ def fetch_and_scrape_task(data):
     result = response.json()
 
     if not isinstance(result, list) and result['status_code'] == 500:
-        raise Exception(result.get('detail', 'Error Scraping'))
+        raise Exception(result.get('Error Scraping'))
     leads_added = 0
 
     with transaction.atomic():
@@ -76,7 +75,7 @@ def fetch_and_scrape_task(data):
                             email=email
                         )
                         email_model.save()
-
+    return f"{leads_added} New Leads"
 def long_task():
 
     time.sleep(10)

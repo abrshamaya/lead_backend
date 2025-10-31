@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import JSONParser
 from django_q.tasks import async_task
+from django_q.models import Task
 from .models import Lead, Email
 from .core.places.places_api import fetch_places_by_query
 from .core.tasks.task import fetch_and_scrape_task,long_task
@@ -61,7 +62,7 @@ def fetch_and_scrape(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     try:
-        task_id =  async_task(fetch_and_scrape_task,data,task_name=query,group="Scrape Group")
+        task_id =  async_task(fetch_and_scrape_task,data,task_name=query.capitalize().replace(',',''),group="Scrape Group")
        
         # response = requests.post(url=f"{SCRAPING_URL}/fetch_and_scrape_places", json=request.data)
         # response.raise_for_status()
@@ -265,13 +266,12 @@ def filter_email(request):
     return Response({"status": "success"})
 
 
-# Test Async
-@api_view(['POST'])
+@api_view(['GET'])
 @parser_classes([JSONParser])
-def  test_q(request):
-    task_id = async_task(long_task, task_name="NEw task")
+def list_tasks(request):
+    tasks = Task.objects.filter(group='Scrape Group').values('id','name', 'started', 'stopped', 'result','success','attempt_count')
 
-    return Response({
-                    "Pending": task_id
-                    })
+    return Response(
+        list(tasks)
+    )
 
