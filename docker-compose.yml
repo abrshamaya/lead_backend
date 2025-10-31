@@ -41,7 +41,7 @@ services:
     restart: unless-stopped
   qcluster:
     container_name: lead_cluster
-    command: sh -c "python manage.py qcluster"
+    command: sh -c "python manage.py migrate && python manage.py qcluster"
     build: ./AmayaLead
     depends_on:
       - db
