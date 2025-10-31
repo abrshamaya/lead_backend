@@ -1,8 +1,10 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import JSONParser
+from django_q.tasks import async_task
 from .models import Lead, Email
 from .core.places.places_api import fetch_places_by_query
+from .core.tasks.task import fetch_and_scrape_task,long_task
 from rest_framework.response import Response
 from django.forms.models import model_to_dict
 from django.shortcuts import get_object_or_404
@@ -51,6 +53,7 @@ def fetch_and_scrape(request):
     searchTerm = data.get("searchTerm", "")
     zipcode = data.get("zipcode", "")
     state = data.get("state", "")
+    result_limit = data.get("result_limit", 1)
 
     if not query:
         return Response(
@@ -58,76 +61,77 @@ def fetch_and_scrape(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     try:
-        response = requests.post(url=f"{SCRAPING_URL}/fetch_and_scrape_places", json=request.data)
-        response.raise_for_status()
-        result = response.json()
-        if not isinstance(result, list) and result['status_code'] == 500:
-            return Response(
-                {"error": result['detail']},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        leads_added = 0
-        # Saving to db
-        for place in result:
-            place_id = place.get("place_id", "")
-            if not place_id:
-                continue
-            # Check for lead existance
-            lead = Lead.objects.filter(place_id=place_id).first()
+        task_id =  async_task(fetch_and_scrape_task,data,task_name=query,group="Scrape Group")
+       
+        # response = requests.post(url=f"{SCRAPING_URL}/fetch_and_scrape_places", json=request.data)
+        # response.raise_for_status()
+        # result = response.json()
+        # if not isinstance(result, list) and result['status_code'] == 500:
+        #     return Response(
+        #         {"error": result['detail']},
+        #         status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        #     )
+        # leads_added = 0
+        # # Saving to db
+        # for place in result:
+        #     place_id = place.get("place_id", "")
+        #     if not place_id:
+        #         continue
+        #     # Check for lead existance
+        #     lead = Lead.objects.filter(place_id=place_id).first()
 
-            if lead:
-                # Lead exists maybe update emails
-                existing_emails = set(Email.objects.filter(business=lead).values_list('email',flat=True))
-                new_emails = set(place.get('emails', []))
-                emails_to_add = new_emails - existing_emails
-                if emails_to_add:
-                    Email.objects.bulk_create(
-                        [
-                            Email(business=lead,email=email) for email in emails_to_add
-                        ]
-                    )
+        #     if lead:
+        #         # Lead exists maybe update emails
+        #         existing_emails = set(Email.objects.filter(business=lead).values_list('email',flat=True))
+        #         new_emails = set(place.get('emails', []))
+        #         emails_to_add = new_emails - existing_emails
+        #         if emails_to_add:
+        #             Email.objects.bulk_create(
+        #                 [
+        #                     Email(business=lead,email=email) for email in emails_to_add
+        #                 ]
+        #             )
 
-            else:
-                # create new lead
-                name = place.get("displayName", {}).get('text', '')
-                types = place.get("types", ["unknown"])
-                website = place.get("websiteUri", "")
-                formatted_address = place.get("formattedAddress", "")
-                opening_hours = place.get("weeklyOpeningHours", "")
-                national_pn = place.get("nationalPhoneNumber")
-                international_pn = place.get("internationalPhoneNumber", "")
-                scrape_error = place.get("scrape_error", "")
+        #     else:
+        #         # create new lead
+        #         name = place.get("displayName", {}).get('text', '')
+        #         types = place.get("types", ["unknown"])
+        #         website = place.get("websiteUri", "")
+        #         formatted_address = place.get("formattedAddress", "")
+        #         opening_hours = place.get("weeklyOpeningHours", "")
+        #         national_pn = place.get("nationalPhoneNumber")
+        #         international_pn = place.get("internationalPhoneNumber", "")
+        #         scrape_error = place.get("scrape_error", "")
 
-                lead = Lead(
-                    place_id=place_id,
-                    name=name,
-                    business_types=", ".join(types),
-                    website=website,
-                    formatted_address=formatted_address,
-                    weekly_opening_hours=opening_hours,
-                    national_phone_number=national_pn,
-                    international_phone_number=international_pn,
-                    scrape_error=scrape_error
-                )
-                lead.save()
+        #         lead = Lead(
+        #             place_id=place_id,
+        #             name=name,
+        #             business_types=", ".join(types),
+        #             website=website,
+        #             formatted_address=formatted_address,
+        #             weekly_opening_hours=opening_hours,
+        #             national_phone_number=national_pn,
+        #             international_phone_number=international_pn,
+        #             scrape_error=scrape_error
+        #         )
+        #         lead.save()
 
-                leads_added += 1
+        #         leads_added += 1
 
-                emails = place.get('emails', [])
-                if emails:
-                    for email in emails:
-                        email_model = Email(
-                            business=lead,
-                            email=email
-                        )
-                        email_model.save()
+        #         emails = place.get('emails', [])
+        #         if emails:
+        #             for email in emails:
+        #                 email_model = Email(
+        #                     business=lead,
+        #                     email=email
+        #                 )
+        #                 email_model.save()
 
         return Response(
             {
-                "result": "Sucess",
-                "inserted": leads_added
+                "task_id": task_id,
             },
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_202_ACCEPTED
         )
     except Exception as e:
         print(str(e))
@@ -259,3 +263,15 @@ def filter_email(request):
 
     # 7. Return simple success status
     return Response({"status": "success"})
+
+
+# Test Async
+@api_view(['POST'])
+@parser_classes([JSONParser])
+def  test_q(request):
+    task_id = async_task(long_task, task_name="NEw task")
+
+    return Response({
+                    "Pending": task_id
+                    })
+

@@ -9,5 +9,6 @@ urlpatterns = [
     path("leads/<str:place_id>", views.delete_lead, name="delete lead"),
     path("retry_scrape", views.retry_scrape, name='retry scrape'),
     path("leads_count", views.leads_count, name='count of leads'),
-    path("filter_email", views.filter_email, name="index")
+    path("filter_email", views.filter_email, name="index"),
+    path("test_task", views.test_q, name="index")
 ]
