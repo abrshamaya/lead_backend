@@ -1,6 +1,11 @@
 import os
 import requests
 from django.db import transaction
+import uuid
+from datetime import timedelta
+from django.utils import timezone
+from django_q.tasks import async_task,schedule
+from amaya_api.core.email.mail_helper import send_mail_to_lead
 import time
 from amaya_api.models import Lead,Email
 if os.getenv("DJANGO_ENV") != "prod":
@@ -75,8 +80,10 @@ def fetch_and_scrape_task(data):
                             email=email
                         )
                         email_model.save()
+                # Emailing me for now
+                for idx,email in enumerate(["abrahamlegese34@gmail.com"]):
+                    schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
+                    email,name,
+                    schedule_type='O',next_run=timezone.now()+timedelta(seconds=5*(idx+1)),repeats=1)
+
     return f"{leads_added} New Leads"
-def long_task():
-
-    time.sleep(10)
-

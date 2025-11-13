@@ -10,5 +10,5 @@ urlpatterns = [
     path("retry_scrape", views.retry_scrape, name='retry scrape'),
     path("leads_count", views.leads_count, name='count of leads'),
     path("filter_email", views.filter_email, name="index"),
-    path("tasks", views.list_tasks, name="List Tasks")
+    path("tasks", views.list_tasks, name="List Tasks"),
 ]

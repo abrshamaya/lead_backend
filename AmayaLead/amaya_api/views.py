@@ -1,11 +1,17 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes
+from datetime import timedelta
+from django.utils import timezone
 from rest_framework.parsers import JSONParser
-from django_q.tasks import async_task
+from django_q.tasks import async_task,schedule
 from django_q.models import Task
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.conf import settings
 from .models import Lead, Email
 from .core.places.places_api import fetch_places_by_query
-from .core.tasks.task import fetch_and_scrape_task,long_task
+from amaya_api.core.email.mail_helper import send_mail_to_lead
+from .core.tasks.task import fetch_and_scrape_task
 from rest_framework.response import Response
 from django.forms.models import model_to_dict
 from django.shortcuts import get_object_or_404
@@ -274,4 +280,25 @@ def list_tasks(request):
     return Response(
         list(tasks)
     )
+
+@api_view(['GET'])
+def send_email(request):
+    email = request.query_params.get("email", None)
+    if not email:
+        return Response({"detail":"No Email given"},status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
+                 "uchihaeual12@gmail.com","FireEnginX", name=f"Send Mail to $Eual",
+                  schedule_type='O',next_run=timezone.now()+timedelta(seconds=5),repeats=1)
+        return Response(
+            {"detail": "Email Sent Sucessfully"},
+            status=status.HTTP_200_OK
+        )
+    except Exception as e:
+        print(f"Email sending error: {str(e)}")
+        return Response(
+            {"error": f"Failed to send reset email. Error: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
