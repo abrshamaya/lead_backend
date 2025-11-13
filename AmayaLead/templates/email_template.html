@@ -1,0 +1,108 @@
+
+{% load static %}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;background:#f4f4f5;">
+  <table cellpadding="0" cellspacing="0" width="100%" style="max-width:680px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;">
+    
+    <!-- Header -->
+    <tr>
+      <td style="padding:24px 32px;background:#0b6efd;color:#ffffff;">
+        <table width="100%">
+          <tr>
+            <td style="font-size:20px;font-weight:700;">
+              {{ company_name }}
+            </td>
+            {% if logo_url %}
+            <td style="text-align:right;">
+              <img src="{{ logo_url }}" alt="{{ company_name }}" width="120" style="display:block;border:0;">
+            </td>
+            {% endif %}
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- Body -->
+    <tr>
+      <td style="padding:28px 32px;">
+        <h1 style="margin:0 0 12px 0;font-size:22px;color:#111;">Hello,</h1>
+
+        <p style="margin:0 0 16px 0;color:#333;line-height:1.5;">
+          We came across your business, <strong>{{ recipient_business_name }}</strong>, and wanted to introduce <strong>{{ company_name }}</strong>.
+          We help local businesses like yours protect their operations, employees, and assets with reliable, affordable insurance coverage — including {{ product_name }}.
+        </p>
+
+        <p style="margin:0 0 18px 0;color:#333;line-height:1.5;">
+          Our licensed agents specialize in policies designed specifically for small and medium-sized businesses.
+          You can request a personalized, no-obligation quote — it only takes a few minutes.
+        </p>
+
+        <!-- Benefits -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;">
+          <tr>
+            <td style="vertical-align:top;padding:8px 0;">
+              <strong style="display:block;color:#111;">Tailored Protection</strong>
+              <span style="color:#555;font-size:14px;">Plans customized for your business size and industry.</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="vertical-align:top;padding:8px 0;">
+              <strong style="display:block;color:#111;">Competitive Rates</strong>
+              <span style="color:#555;font-size:14px;">We compare multiple carriers to find the best pricing for you.</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="vertical-align:top;padding:8px 0;">
+              <strong style="display:block;color:#111;">Dedicated Support</strong>
+              <span style="color:#555;font-size:14px;">Licensed agents available to guide you from quote to claim.</span>
+            </td>
+          </tr>
+        </table>
+
+        <!-- CTA -->
+        <p style="margin:18px 0 0 0;">
+          <a href="{{ cta_url }}" style="background:#0b6efd;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;display:inline-block;">
+            Get a Free Quote
+          </a>
+        </p>
+      </td>
+    </tr>
+
+    <!-- Contact section -->
+    <tr>
+      <td style="padding:0 32px 28px 32px;color:#444;">
+        <p style="margin:18px 0 0 0;color:#555;">
+          If you prefer, simply reply to this email or call us at 
+          <a href="tel:{{ phone }}" style="color:#0b6efd;text-decoration:none;">{{ phone }}</a>.
+          Our licensed agents are happy to answer any questions and help you find the right coverage for your business.
+        </p>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="padding:18px 32px;background:#fbfbfc;color:#666;font-size:13px;">
+        <p style="margin:0 0 6px 0;">
+          {{ company_name }} · {{ company_address }} · 
+          <a href="tel:{{ phone }}" style="color:#0b6efd;text-decoration:none;">{{ phone }}</a>
+        </p>
+        {% if license_number %}
+        <p style="margin:0 0 6px 0;">
+          Licensed Insurance Provider — License No. {{ license_number }}
+        </p>
+        {% endif %}
+        <p style="margin:0;">
+          If you prefer not to receive future messages, you can 
+          <a href="{{ unsubscribe_url }}" style="color:#999;text-decoration:underline;">unsubscribe here</a>.
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

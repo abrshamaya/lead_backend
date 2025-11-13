@@ -1,0 +1,21 @@
+
+Subject: Business insurance options for {{ recipient_business_name }}
+
+Hello,
+
+We came across your business, {{ recipient_business_name }}, and wanted to introduce {{ company_name }}.
+We help local businesses protect their operations, employees, and assets with reliable, affordable insurance coverage — including {{ product_name }}.
+
+Our licensed agents specialize in policies designed specifically for small and medium-sized businesses.
+You can request a personalized, no-obligation quote — it only takes a few minutes.
+
+To get your quote, visit: {{ cta_url }}
+
+If you prefer, simply reply to this email or call us at {{ phone }}.
+Our licensed agents are happy to answer any questions and help you find the right coverage for your business.
+
+{{ company_name }}
+{{ company_address }}
+{% if license_number %}Licensed Insurance Provider — License No. {{ license_number }}{% endif %}
+
+If you prefer not to receive future messages, you can unsubscribe here: {{ unsubscribe_url }}
