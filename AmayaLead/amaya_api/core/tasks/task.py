@@ -12,6 +12,9 @@ import time
 
 EMAIL_DELAY_IN_MINS = 3
 CALL_DELAY_IN_MINS = 5
+
+now = timezone.now()
+
 from amaya_api.models import Lead,Email
 if os.getenv("DJANGO_ENV") != "prod":
     SCRAPING_URL = 'http://127.0.0.1:8001'
@@ -92,13 +95,13 @@ def fetch_and_scrape_task(data):
                 for idx,email in enumerate(["uchihaeual12@gmail.com"]):
                     schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
                     email,name,
-                    schedule_type='O',next_run=timezone.now()+timedelta(minutes=EMAIL_DELAY_IN_MINS*(idx+1)),repeats=1)
+                    schedule_type='O',next_run=now+timedelta(minutes=EMAIL_DELAY_IN_MINS*(idx+1)),repeats=1)
                 for idx,pairs in enumerate(bussiness_name_phone_pairs):
                     b_name = pairs[0]
                     # phone_number = pairs[1]
                     # using our phone number for now
                     schedule("amaya_api.core.calls.call_helper.make_outbound_call",
                     b_name,"+15712772462",
-                    schedule_type='O',next_run=timezone.now()+timedelta(minutes=CALL_DELAY_IN_MINS*(idx+1)),repeats=1)
+                    schedule_type='O',next_run=now+timedelta(minutes=CALL_DELAY_IN_MINS*(idx+1)),repeats=1)
 
     return f"{leads_added} New Leads"

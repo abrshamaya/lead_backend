@@ -102,13 +102,13 @@ def make_outbound_call(business_name: str, to_number: str):
             },
         },
     )
-    sucess = result.success
+    success= result.success
     status = CallStatus.Status.INITIATED if result.success else CallStatus.Status.FAILED
     conversation_id = result.conversation_id or ""
     call_sid = result.call_sid or ""
 
     CallStatus(
-        sucess=sucess,
+        success=success,
         status = status,
         conversation_id=conversation_id,
         call_sid = call_sid

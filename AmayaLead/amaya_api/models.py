@@ -26,14 +26,23 @@ class Lead(models.Model):
 class Email(models.Model):
     business = models.ForeignKey(Lead, on_delete = models.CASCADE,related_name='emails')
     email = models.EmailField(blank=True, default = '')
+
 class CallStatus(models.Model):
     class Status(models.TextChoices):
         INITIATED = 'initiated', 'Initiated'
-        INPROGRESS = 'in-progress','inprogress'
-        PROCESSING = 'processing','Processing'
-        DONE = 'Done','done'
-        FAILED = 'failed','Failed'
-    sucess = models.BooleanField(default=False)
-    status = models.CharField(max_length=64, choices=Status.choices,default=Status.INITIATED)
-    conversation_id = models.CharField(max_length=128,default='')
-    call_sid = models.CharField(max_length=128,default='')
+        INPROGRESS = 'in-progress', 'In Progress'
+        PROCESSING = 'processing', 'Processing'
+        DONE = 'done', 'Done'
+        FAILED = 'failed', 'Failed'
+
+    success = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        default=Status.INITIATED
+    )
+    conversation_id = models.CharField(max_length=128, default='')
+    call_sid = models.CharField(max_length=128, default='')
+
+    def __str__(self):
+        return f"{self.status} ({self.conversation_id})"
