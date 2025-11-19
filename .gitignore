@@ -10,3 +10,4 @@ scraper/__pycache__
 
 *.env
 test*
+AmayaLead/pyproject.toml
