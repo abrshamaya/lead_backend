@@ -11,6 +11,11 @@ from django.conf import settings
 from .models import Lead, Email
 from .core.places.places_api import fetch_places_by_query
 from amaya_api.core.email.mail_helper import send_mail_to_lead
+from datetime import timedelta
+from django.utils import timezone
+from django_q.tasks import async_task,schedule
+from amaya_api.core.email.mail_helper import send_mail_to_lead
+from amaya_api.core.calls.call_helper import make_outbound_call
 from .core.tasks.task import fetch_and_scrape_task
 from rest_framework.response import Response
 from django.forms.models import model_to_dict
@@ -18,6 +23,9 @@ from django.shortcuts import get_object_or_404
 from django.db import transaction
 import os
 import requests
+
+EMAIL_DELAY_IN_MINS = 1
+CALL_DELAY_IN_MINS = 1
 
 # Fast API Scraping servel URL
 
@@ -301,4 +309,74 @@ def send_email(request):
             {"error": f"Failed to send reset email. Error: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+@api_view(['POST'])
+@parser_classes([JSONParser])
+def send_email_to_lead(request):
+    place_id = request.data.get("place_id")
+    if not place_id:
+        return Response({
+            "detail": "Missing Lead ID",
+            status:status.HTTP_400_BAD_REQUEST
+                        })
+    lead = Lead.objects.filter(place_id = place_id).first()
+    if not lead:
+        return Response({
+            "detail":"Lead not found"},status=status.HTTP_404_NOT_FOUND)
+    
+    emails = lead.emails.all()
+    now = timezone.now()
+    try:
+        for (idx,email) in enumerate(emails):
+                # TODO: change to lead email
+                _email = "abrahamlegese34@gmail.com"
+                schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
+                            _email,lead.name,
+                            schedule_type='O',next_run=now+timedelta(minutes=EMAIL_DELAY_IN_MINS*(idx+1)),repeats=1)
 
+        return Response(
+                    {"detail": "Email Sent Sucessfully"},
+                    status=status.HTTP_200_OK
+                )
+
+    except Exception as e:
+            print(f"Phone number sending error: {str(e)}")
+            return Response(
+                {"error": f"Failed to send reset email. Error: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@parser_classes([JSONParser])             
+def call_lead(request):
+    """
+        Intiates a call with a lead using Eleven labs api 
+    """
+    place_id = request.data.get("place_id")
+    if not place_id:
+        return Response({
+            "detail": "Missing Lead ID",
+            status:status.HTTP_400_BAD_REQUEST
+                        })
+    lead = Lead.objects.filter(place_id = place_id).first()
+
+    if not lead:
+        return Response({
+            "detail":"Lead not found"},status=status.HTTP_404_NOT_FOUND)
+    try:
+        p_number = lead.international_phone_number
+        if not(p_number):
+            return Response({"detail":"Lead has no phone number"},status=status.HTTP_404_NOT_FOUND)
+        else:
+            schedule("amaya_api.core.calls.call_helper.make_outbound_call",
+                            lead.name,"+15712772462",
+                            schedule_type='O',next_run=timezone.now()+timedelta(minutes=CALL_DELAY_IN_MINS),repeats=1)
+            return Response(
+                        {"detail": "Call Sent Sucessfully"},
+                        status=status.HTTP_200_OK
+                    )
+    except Exception as e:
+        print(f"Phone number sending error: {str(e)}")
+        return Response(
+            {"error": f"Failed to send reset email. Error: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

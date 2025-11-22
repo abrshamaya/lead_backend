@@ -11,4 +11,6 @@ urlpatterns = [
     path("leads_count", views.leads_count, name='count of leads'),
     path("filter_email", views.filter_email, name="index"),
     path("tasks", views.list_tasks, name="List Tasks"),
+    path("call_lead", views.call_lead, name="Call Lead"),
+    path("email_lead", views.send_email_to_lead, name="Email Lead")
 ]
