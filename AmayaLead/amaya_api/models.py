@@ -14,6 +14,8 @@ class Lead(models.Model):
     scrape_error = models.CharField(max_length=512,blank=True , default = None)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_now = models.DateTimeField(auto_now=True)
+    email_sent = models.BooleanField(default=False)
+    call_sent = models.BooleanField(default=False)
 
 
 
