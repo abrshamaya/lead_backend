@@ -10,7 +10,7 @@ from django.template.loader import render_to_string
 from django.conf import settings
 from .models import Lead, Email
 from .core.places.places_api import fetch_places_by_query
-from amaya_api.core.email.mail_helper import send_mail_to_lead
+from amaya_api.core.email.mail_helper import send_mail_to_lead,get_conversation
 from datetime import timedelta
 from django.utils import timezone
 from django_q.tasks import async_task,schedule
@@ -328,11 +328,13 @@ def send_email_to_lead(request):
     try:
         for (idx,email) in enumerate(emails):
                 # TODO: change to lead email
-                _email = "abrahamlegese34@gmail.com"
+                _email = "uchihaeual12@gmail.com"
+
                 schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
                             _email,lead.name,
                             schedule_type='O',next_run=now+timedelta(minutes=EMAIL_DELAY_IN_MINS*(idx+1)),repeats=1)
-
+                lead.email_sent = True
+                lead.save()
         return Response(
                     {"detail": "Email Sent Sucessfully"},
                     status=status.HTTP_200_OK
@@ -370,6 +372,8 @@ def call_lead(request):
             schedule("amaya_api.core.calls.call_helper.make_outbound_call",
                             lead.name,"+15712772462",
                             schedule_type='O',next_run=timezone.now()+timedelta(minutes=CALL_DELAY_IN_MINS),repeats=1)
+            lead.call_sent = True
+            lead.save()
             return Response(
                         {"detail": "Call Sent Sucessfully"},
                         status=status.HTTP_200_OK
@@ -380,3 +384,56 @@ def call_lead(request):
             {"error": f"Failed to send reset email. Error: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+@api_view(['GET'])
+def get_email_history(request):
+    """
+        Get the email history of a lead
+    """
+    place_id = request.query_params.get("place_id", "")
+    lead = get_object_or_404(Lead,place_id=place_id)
+
+    emails = list(lead.emails.all().values())
+
+    # Return empty conversation history if we have never talked to the person
+    if not lead.email_sent:
+        return Response({
+                            'history':[]
+                        })
+    try:
+        _email = "uchihaeual12@gmail.com"
+        conv_history = get_conversation(_email)
+        return Response({
+                            "history":conv_history
+                        })
+    except Exception as e:
+        return Response({
+                                "error":str(e),
+                                
+                            },status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def get_emailed_leads(request):
+    leads = Lead.objects.prefetch_related('emails').filter(email_sent=True)
+
+    res = []
+
+    for lead in leads:
+        lead_info = model_to_dict(lead)
+        lead_info['emails'] = [e.email for e in lead.emails.all()]
+        lead_info['created_at'] = lead.created_at
+        lead_info['updated_now'] = lead.updated_now
+        res.append(lead_info)
+    return Response(
+        {
+            "leads":res
+        }
+    )    
+
+@api_view(['GET'])
+def get_called_leads(request):
+    leads = Lead.objects.filter(call_sent=True)
+    data = [model_to_dict(lead) for lead in leads]
+    return Response({
+                        'leads':data
+                    })
+
