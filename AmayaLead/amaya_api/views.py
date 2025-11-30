@@ -14,7 +14,7 @@ from amaya_api.core.email.mail_helper import send_mail_to_lead,get_conversation
 from datetime import timedelta
 from django.utils import timezone
 from django_q.tasks import async_task,schedule
-from amaya_api.core.email.mail_helper import send_mail_to_lead
+from amaya_api.core.email.mail_helper import send_mail_to_lead,send_email
 from amaya_api.core.calls.call_helper import make_outbound_call
 from .core.tasks.task import fetch_and_scrape_task
 from rest_framework.response import Response
@@ -289,15 +289,22 @@ def list_tasks(request):
         list(tasks)
     )
 
-@api_view(['GET'])
+@api_view(['POST'])
 def send_email(request):
-    email = request.query_params.get("email", None)
+    email = request.data.get("to_email","")
+    place_id = request.data.get("place_id", "")
+    message = request.data.get("message","")
+    lead = get_object_or_404(Lead,place_id=place_id)
+    lead_emails = [lead['email'] for lead in lead.emails.all().values('email')]
+    print("LEAD EMAILS",lead_emails,email)
     if not email:
         return Response({"detail":"No Email given"},status=status.HTTP_400_BAD_REQUEST)
+    if email not in lead_emails:
+        return Response({"detail":"No Valid Email given"},status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
-                 "uchihaeual12@gmail.com","FireEnginX", name=f"Send Mail to $Eual",
+        schedule("amaya_api.core.email.mail_helper.send_email",
+                 email,lead.name,message,
                   schedule_type='O',next_run=timezone.now()+timedelta(seconds=5),repeats=1)
         return Response(
             {"detail": "Email Sent Sucessfully"},
@@ -323,12 +330,12 @@ def send_email_to_lead(request):
         return Response({
             "detail":"Lead not found"},status=status.HTTP_404_NOT_FOUND)
     
-    emails = lead.emails.all()
+    emails = list(lead.emails.all().values_list("email",flat=True))
     now = timezone.now()
     try:
         for (idx,email) in enumerate(emails):
                 # TODO: change to lead email
-                _email = "uchihaeual12@gmail.com"
+                _email = email
 
                 schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
                             _email,lead.name,
@@ -390,18 +397,22 @@ def get_email_history(request):
         Get the email history of a lead
     """
     place_id = request.query_params.get("place_id", "")
+    email = request.query_params.get("email","")
     lead = get_object_or_404(Lead,place_id=place_id)
 
-    emails = list(lead.emails.all().values())
+
+    emails = list(lead.emails.values_list("email", flat=True))
+
 
     # Return empty conversation history if we have never talked to the person
-    if not lead.email_sent:
+    if not lead.email_sent or email not in emails:
         return Response({
                             'history':[]
                         })
     try:
+        conv_history = []
         _email = "uchihaeual12@gmail.com"
-        conv_history = get_conversation(_email)
+        conv_history=get_conversation(email)
         return Response({
                             "history":conv_history
                         })

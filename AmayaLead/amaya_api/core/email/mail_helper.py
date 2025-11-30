@@ -42,6 +42,7 @@ def send_mail_to_lead(lead_email, business_name):
             fail_silently=False,
             html_message=html_msg
         )
+ 
     except Exception as e:
         raise Exception("Failed to send email ", str(e))
 
@@ -147,5 +148,26 @@ def get_conversation(other_email:str)->List[Message]:
 
 
 
+def send_email(lead_email,bussiness_name, message):
+    if not lead_email:
+        raise Exception("No Email Given")
+
+    if not message:
+        raise Exception("No Message Provided")
+
+    print("Attempting to send email...")
+    print(f"From: {settings.DEFAULT_FROM_EMAIL}")
+    print(f"To: {lead_email}")
+
+    try:
+        send_mail(
+            subject="",   # no subject
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[lead_email],
+            fail_silently=False
+        )
+    except Exception as e:
+        raise Exception("Failed to send email", str(e))
 
 
