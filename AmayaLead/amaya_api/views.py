@@ -291,21 +291,23 @@ def list_tasks(request):
 
 @api_view(['POST'])
 def send_email(request):
-    email = request.data.get("to_email","")
+    email_rece = request.data.get("to_email","")
     place_id = request.data.get("place_id", "")
     message = request.data.get("message","")
     lead = get_object_or_404(Lead,place_id=place_id)
     lead_emails = [lead['email'] for lead in lead.emails.all().values('email')]
-    print("LEAD EMAILS",lead_emails,email)
-    if not email:
+    print("LEAD EMAILS",lead_emails,email_rece)
+    if not email_rece:
         return Response({"detail":"No Email given"},status=status.HTTP_400_BAD_REQUEST)
-    if email not in lead_emails:
+    if email_rece not in lead_emails:
         return Response({"detail":"No Valid Email given"},status=status.HTTP_400_BAD_REQUEST)
-
     try:
-        schedule("amaya_api.core.email.mail_helper.send_email",
-                 email,lead.name,message,
-                  schedule_type='O',next_run=timezone.now()+timedelta(seconds=5),repeats=1)
+
+        from amaya_api.core.email.mail_helper import send_email as send_actual_email
+        send_actual_email(email_rece,lead.name,message)
+        # schedule("amaya_api.core.email.mail_helper.send_email",
+        #          email,lead.name,message,
+        #           schedule_type='O',next_run=timezone.now()+timedelta(seconds=5),repeats=1)
         return Response(
             {"detail": "Email Sent Sucessfully"},
             status=status.HTTP_200_OK
@@ -313,7 +315,7 @@ def send_email(request):
     except Exception as e:
         print(f"Email sending error: {str(e)}")
         return Response(
-            {"error": f"Failed to send reset email. Error: {str(e)}"},
+            {"error": f"Failed to send email. Error: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 @api_view(['POST'])
@@ -411,7 +413,6 @@ def get_email_history(request):
                         })
     try:
         conv_history = []
-        _email = "uchihaeual12@gmail.com"
         conv_history=get_conversation(email)
         return Response({
                             "history":conv_history
