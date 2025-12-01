@@ -333,15 +333,16 @@ def send_email_to_lead(request):
             "detail":"Lead not found"},status=status.HTTP_404_NOT_FOUND)
     
     emails = list(lead.emails.all().values_list("email",flat=True))
-    now = timezone.now()
+    # now = timezone.now()
     try:
         for (idx,email) in enumerate(emails):
                 # TODO: change to lead email
                 _email = email
-
-                schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
-                            _email,lead.name,
-                            schedule_type='O',next_run=now+timedelta(minutes=EMAIL_DELAY_IN_MINS*(idx+1)),repeats=1)
+                from amaya_api.core.email.mail_helper import send_mail_to_lead as send_actual_email
+                send_actual_email(_email,lead.name)
+                # schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
+                #             _email,lead.name,
+                #             schedule_type='O',next_run=now+timedelta(minutes=EMAIL_DELAY_IN_MINS*(idx+1)),repeats=1)
                 lead.email_sent = True
                 lead.save()
         return Response(
