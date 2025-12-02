@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from places.places_api import fetch_places_by_query
 from AI.filter_emails import filter_emails
+from AI.generate_reply import generate_reply_suggestions, Message as AIMessage, AiSuggestion
 from providers.apify_fetch import fetch_places_by_query_via_apify
 from pydantic import BaseModel
 import sys
@@ -17,7 +18,7 @@ from typing import List
 import traceback
 app = FastAPI()
 
-SCRAPER_TIMEOUT = 100
+SCRAPER_TIMEOUT = 60
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -232,6 +233,54 @@ def api_filter_emails(req: EmailsReq):
 
 class WebsiteReq(BaseModel):
     url: str
+
+
+class MessageModel(BaseModel):
+    msg: str
+    date: str  # ISO format string
+    sender_name: str
+    sender_email: str
+    receiver_email: str
+
+
+class GenerateReplyRequest(BaseModel):
+    conversation: List[MessageModel]
+    business_name: str
+    our_email: str  # The email we send from (to identify our messages in conversation)
+    num_suggestions: Optional[int] = 3
+
+
+@app.post("/generate_reply")
+def generate_reply(req: GenerateReplyRequest) -> List[AiSuggestion]:
+    """
+    Generate AI-powered reply suggestions based on conversation history.
+    
+    Args:
+        conversation: List of messages representing the conversation history
+        business_name: Name of the business lead
+        num_suggestions: Number of reply suggestions to generate (default: 3)
+    
+    Returns:
+        List of AiSuggestion objects with id and text fields
+    """
+    try:
+        # Convert Pydantic models to dicts for the AI function
+        conversation_dicts = [msg.model_dump() for msg in req.conversation]
+        
+        suggestions = generate_reply_suggestions(
+            conversation=conversation_dicts,
+            business_name=req.business_name,
+            our_email=req.our_email,
+            num_suggestions=req.num_suggestions or 3
+        )
+        
+        return suggestions
+    except Exception as e:
+        tb = traceback.extract_tb(sys.exc_info()[2])[-1]
+        raise HTTPException(
+            status_code=500,
+            detail=f"{tb.filename}:{tb.lineno} {str(e)}"
+        )
 
 
 @app.post("/scrape")

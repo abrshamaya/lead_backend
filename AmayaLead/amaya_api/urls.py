@@ -16,5 +16,6 @@ urlpatterns = [
     path("emailed_leads",views.get_emailed_leads,name="Get all emailed leads"),
     path("called_leads",views.get_called_leads, name="Called Leads"),
     path("email_history", views.get_email_history, name="get conversation history"),
-    path("send_email_message_to_lead", views.send_email, name="sends a message to lead")
+    path("send_email_message_to_lead", views.send_email, name="sends a message to lead"),
+    path("generate_ai_reply", views.generate_ai_reply, name="generate AI reply suggestions")
 ]

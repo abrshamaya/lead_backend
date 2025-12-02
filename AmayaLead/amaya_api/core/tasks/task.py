@@ -10,8 +10,8 @@ from amaya_api.core.calls.call_helper import make_outbound_call
 import time
 
 
-EMAIL_DELAY_IN_MINS = 3
-CALL_DELAY_IN_MINS = 5
+EMAIL_DELAY_IN_MINS = 1
+CALL_DELAY_IN_MINS = 2
 
 now = timezone.now()
 
@@ -84,18 +84,18 @@ def fetch_and_scrape_task(data):
                 leads_added += 1
 
                 # emails = place.get('emails', [])
-                # if emails:
-                #     for email in emails:
-                #         email_model = Email(
-                #             business=lead,
-                #             email=email
-                #         )
-                #         email_model.save()
-                # # Emailing me for now
-                # for idx,email in enumerate(["uchihaeual12@gmail.com"]):
-                #     schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
-                #     email,name,
-                #     schedule_type='O',next_run=now+timedelta(minutes=EMAIL_DELAY_IN_MINS*(idx+1)),repeats=1)
+                if emails:
+                    for email in emails:
+                        email_model = Email(
+                            business=lead,
+                            email=email
+                        )
+                        email_model.save()
+                # Emailing me for now
+                for idx,email in enumerate(emails):
+                    schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
+                    email,name,
+                    schedule_type='O',next_run=now+timedelta(minutes=EMAIL_DELAY_IN_MINS*(idx+1)),repeats=1)
                 # for idx,pairs in enumerate(bussiness_name_phone_pairs):
                 #     b_name = pairs[0]
                 #     # phone_number = pairs[1]

@@ -333,28 +333,74 @@ def send_email_to_lead(request):
             "detail":"Lead not found"},status=status.HTTP_404_NOT_FOUND)
     
     emails = list(lead.emails.all().values_list("email",flat=True))
-    # now = timezone.now()
+    
+    if not emails:
+        return Response({
+            "detail": "Lead has no emails"
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
     try:
-        for (idx,email) in enumerate(emails):
-                # TODO: change to lead email
-                _email = email
-                from amaya_api.core.email.mail_helper import send_mail_to_lead as send_actual_email
-                send_actual_email(_email,lead.name)
-                # schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
-                #             _email,lead.name,
-                #             schedule_type='O',next_run=now+timedelta(minutes=EMAIL_DELAY_IN_MINS*(idx+1)),repeats=1)
-                lead.email_sent = True
-                lead.save()
+        for (idx, email_addr) in enumerate(emails):
+            # Check if we have conversation history with this email
+            conversation = []
+            if lead.email_sent:
+                conversation = get_conversation(email_addr)
+            
+            if conversation:
+                # We have conversation history - generate AI reply
+                # conversation already has date as ISO string, can pass directly
+                payload = {
+                    "conversation": conversation,
+                    "business_name": lead.name,
+                    "our_email": settings.DEFAULT_FROM_EMAIL,
+                    "num_suggestions": 1  # Just get the best suggestion
+                }
+                
+                # Call the AI reply generation endpoint
+                response = requests.post(
+                    f"{SCRAPING_URL}/generate_reply",
+                    json=payload
+                )
+                response.raise_for_status()
+                suggestions = response.json()
+                
+                if suggestions and len(suggestions) > 0:
+                    # Use the first (best) suggestion
+                    ai_message = suggestions[0].get("text", "")
+                    if ai_message:
+                        from amaya_api.core.email.mail_helper import send_email as send_actual_email
+                        send_actual_email(email_addr, lead.name, ai_message)
+                    else:
+                        # AI returned empty text - fallback to template email
+                        from amaya_api.core.email.mail_helper import send_mail_to_lead as send_template_email
+                        send_template_email(email_addr, lead.name)
+                else:
+                    # Fallback to template email if no suggestions generated
+                    from amaya_api.core.email.mail_helper import send_mail_to_lead as send_template_email
+                    send_template_email(email_addr, lead.name)
+            else:
+                # No conversation history - send initial template email
+                from amaya_api.core.email.mail_helper import send_mail_to_lead as send_template_email
+                send_template_email(email_addr, lead.name)
+            
+            lead.email_sent = True
+            lead.save()
+            
         return Response(
-                    {"detail": "Email Sent Sucessfully"},
+                    {"detail": "Email Sent Successfully"},
                     status=status.HTTP_200_OK
                 )
 
+    except requests.RequestException as e:
+        print(f"AI reply generation error: {str(e)}")
+        return Response(
+            {"error": f"Failed to generate AI reply. Error: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     except Exception as e:
-            print(f"Phone number sending error: {str(e)}")
-            return Response(
-                {"error": f"Failed to send reset email. Error: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print(f"Email sending error: {str(e)}")
+        return Response(
+            {"error": f"Failed to send email. Error: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -449,4 +495,81 @@ def get_called_leads(request):
     return Response({
                         'leads':data
                     })
+
+@api_view(['POST'])
+@parser_classes([JSONParser])
+def generate_ai_reply(request):
+    """
+    Generate AI-powered reply suggestions based on conversation history.
+    
+    Expected request body:
+    {
+        "place_id": "abc123",
+        "email": "john@business.com",
+        "num_suggestions": 3  // optional, defaults to 3
+    }
+    
+    Returns:
+    {
+        "suggestions": [
+            {"id": "uuid-1", "text": "Thank you for your interest..."},
+            {"id": "uuid-2", "text": "I'd be happy to help..."},
+            {"id": "uuid-3", "text": "Let me provide you with..."}
+        ]
+    }
+    """
+    place_id = request.data.get("place_id", "")
+    email = request.data.get("email", "")
+    num_suggestions = request.data.get("num_suggestions", 3)
+    
+    if not place_id:
+        return Response(
+            {"error": "place_id is required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if not email:
+        return Response(
+            {"error": "email is required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Fetch lead from database
+    lead = get_object_or_404(Lead.objects.prefetch_related('emails'), place_id=place_id)
+    
+    # Verify email belongs to this lead
+    lead_emails = list(lead.emails.values_list("email", flat=True))
+    if email not in lead_emails:
+        return Response(
+            {"error": "Email not found for this lead"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Get conversation history
+    conversation = get_conversation(email)
+    
+    # Build payload with data from database
+    payload = {
+        "conversation": conversation,
+        "business_name": lead.name,
+        "our_email": settings.DEFAULT_FROM_EMAIL,
+        "num_suggestions": num_suggestions
+    }
+    
+    try:
+        response = requests.post(
+            f"{SCRAPING_URL}/generate_reply",
+            json=payload
+        )
+        response.raise_for_status()
+        suggestions = response.json()
+        
+        return Response({
+            "suggestions": suggestions
+        })
+    except requests.RequestException as e:
+        return Response(
+            {"error": f"Failed to generate AI reply: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 

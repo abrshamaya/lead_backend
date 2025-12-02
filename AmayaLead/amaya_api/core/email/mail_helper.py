@@ -46,39 +46,121 @@ def send_mail_to_lead(lead_email, business_name):
     except Exception as e:
         raise Exception("Failed to send email ", str(e))
 
-pattern = re.compile(r"^(.*?)(?:\bOn\b.*)?$", re.DOTALL)
+# Pattern to match Gmail's thread markers like:
+# "On Thu, Jan 15, 2024 at 10:30 AM John Doe <john@example.com> wrote:"
+# "On Thursday, January 15, 2024 at 10:30 AM John Doe <john@example.com> wrote:"
+# Also handles variations with different date formats
+GMAIL_THREAD_PATTERN = re.compile(
+    r'\n*On\s+'
+    r'(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)'
+    r'[,\s]+'
+    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)'
+    r'[^<>]*?'  # Date and time portion
+    r'(?:<[^>]+>)?\s*'  # Optional email in angle brackets
+    r'wrote:',
+    re.IGNORECASE | re.DOTALL
+)
+
+# Alternative pattern for "On <date> at <time>, <name> wrote:"
+GMAIL_THREAD_PATTERN_ALT = re.compile(
+    r'\n*On\s+\d{1,2}[/-]\d{1,2}[/-]\d{2,4}.*?wrote:',
+    re.IGNORECASE | re.DOTALL
+)
+
+# Pattern for quoted lines (lines starting with >)
+QUOTED_LINE_PATTERN = re.compile(r'^>.*$', re.MULTILINE)
+
 
 class Message(TypedDict):
-    msg:str
-    date:datetime
-    sender_name:str
-    sender_email:str
-    receiver_email:str
+    msg: str
+    date: str  # ISO format string (e.g., "2024-01-15T10:30:00+00:00")
+    sender_name: str
+    sender_email: str
+    receiver_email: str
 
-def safe_date(msg):
-    d = parsedate_to_datetime(msg)
+
+def safe_date(msg_date: str) -> str:
+    """
+    Parse email date string to ISO format string in UTC.
+    
+    All dates are converted to UTC to ensure correct chronological sorting,
+    since ISO strings with different timezone offsets don't sort lexicographically
+    in chronological order (e.g., "10:30+05:00" sorts after "06:00+00:00" even
+    though 10:30+05:00 = 05:30 UTC which is earlier than 06:00 UTC).
+    """
+    d = parsedate_to_datetime(msg_date)
 
     if d.tzinfo is None:
         d = d.replace(tzinfo=timezone.utc)
+    else:
+        # Convert to UTC for consistent sorting
+        d = d.astimezone(timezone.utc)
 
-    return d
+    return d.isoformat()
 
-def get_plain_text(msg):
+
+def strip_gmail_thread(text: str) -> str:
     """
-    msg = email.message.Message object (from message_from_bytes)
-    returns only the plain text content, no HTML, no attachments
+    Remove Gmail thread markers and quoted content from email text.
+    
+    Gmail adds lines like:
+    "On Thursday, January 15, 2024 at 10:30 AM John Doe <john@example.com> wrote:"
+    followed by the quoted previous message.
+    
+    This function removes that and everything after it.
     """
+    # Normalize line endings
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    
+    # Try to find Gmail thread marker and remove it + everything after
+    match = GMAIL_THREAD_PATTERN.search(text)
+    if match:
+        text = text[:match.start()]
+    else:
+        # Try alternative pattern
+        match = GMAIL_THREAD_PATTERN_ALT.search(text)
+        if match:
+            text = text[:match.start()]
+    
+    # Remove any remaining quoted lines (lines starting with >)
+    text = QUOTED_LINE_PATTERN.sub('', text)
+    
+    # Clean up multiple blank lines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text.strip()
+
+
+def get_plain_text(msg) -> str:
+    """
+    Extract plain text content from email message.
+    
+    Args:
+        msg: email.message.Message object (from message_from_bytes)
+    
+    Returns:
+        Plain text content with Gmail thread markers removed
+    """
+    def extract_and_clean(payload_bytes, charset: str) -> str:
+        """Decode payload and clean up Gmail thread content."""
+        try:
+            text = payload_bytes.decode(charset or 'utf-8', errors="replace")
+            return strip_gmail_thread(text)
+        except Exception:
+            return ""
+    
     if not msg.is_multipart():
         if msg.get_content_type() == "text/plain":
-            plain_msg =  msg.get_payload(decode=True).decode(msg.get_content_charset() or 'utf-8', errors="replace")
-            m = pattern.match(plain_msg)
-            if m:
-                return m.group(1).replace("\r\n","\n").replace("\r", "\n").strip()
+            charset = msg.get_content_charset() or 'utf-8'
+            payload = msg.get_payload(decode=True)
+            if payload:
+                return extract_and_clean(payload, charset)
         return ""
 
     for part in msg.walk():
         content_type = part.get_content_type()
         content_disposition = str(part.get("Content-Disposition", ""))
+        
         # Skip attachments
         if "attachment" in content_disposition:
             continue
@@ -86,12 +168,11 @@ def get_plain_text(msg):
         # We only care about plain text
         if content_type == "text/plain":
             charset = part.get_content_charset() or "utf-8"
-            plain_msg = part.get_payload(decode=True).decode(charset, errors="replace")
-            m = pattern.match(plain_msg)
-            if m:
-                return m.group(1).replace("\r\n","\n").replace("\r", "\n").strip()
+            payload = part.get_payload(decode=True)
+            if payload:
+                return extract_and_clean(payload, charset)
 
-    return ""   # no text/plain found
+    return ""  # no text/plain found
 
 def get_conversation(other_email:str)->List[Message]:
     imap = imaplib.IMAP4_SSL(settings.EMAIL_IMAP_HOST)
