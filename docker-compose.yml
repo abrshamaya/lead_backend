@@ -10,13 +10,15 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "127.0.0.1:5432:5432"  # optional, for direct host access
+      - "5432:5432"  # optional, for direct host access
     restart: unless-stopped
 
   backend:
     container_name: lead_backend
     build: ./AmayaLead
     command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
     volumes:
       - ./AmayaLead:/app
     depends_on:
@@ -34,6 +36,8 @@ services:
     container_name: lead_scraper
     command: sh -c "uvicorn main:app --reload --host 0.0.0.0 --port 8001"
     build: ./FastAPI
+    ports:
+      - "8001:8001"
     restart: unless-stopped
   qcluster:
     container_name: lead_cluster
