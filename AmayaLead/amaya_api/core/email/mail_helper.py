@@ -14,6 +14,11 @@ def send_mail_to_lead(lead_email, business_name):
     if not lead_email:
         raise Exception("No Email Given")
 
+# Mahfuz Insurance Agency
+# 6000 Stevenson Ave suite 303
+# Alexandria VA 22304
+# Telephone: 703-212-9131
+# mummedm@mahfuzinsagency.com
 
     print("Attempting to send email...")
     print(f"From: {settings.DEFAULT_FROM_EMAIL}")
@@ -21,10 +26,11 @@ def send_mail_to_lead(lead_email, business_name):
     context = {
         "subject": f"Business insurance options for {business_name}",
         "recipient_business_name": f"{business_name}",
-        "company_name": "Remedy Insurance and taxes.",
-        "company_address": "500 Market Street, New York, NY 10001",
+        "company_name": "Mahfuz Insurance Agency",
+        "company_address": "6000 Stevenson Ave suite 303 Alexandria VA 22304",
         "license_number": "LIC-1234567",
-        "phone": "+15712772462",
+        "phone": "703-212-9131",
+        "email":"mummedm@mahfuzinsagency.com",
         "product_name": "Business Liability and Property Coverage",
         "logo_url": "https://cdn.securesure.com/logo.png",
         "cta_url": "https://securesure.com/quote/?lead_id=abc123",

@@ -78,8 +78,13 @@
     <tr>
       <td style="padding:0 32px 28px 32px;color:#444;">
         <p style="margin:18px 0 0 0;color:#555;">
-          If you prefer, simply reply to this email or call us at 
-          <a href="tel:{{ phone }}" style="color:#0b6efd;text-decoration:none;">{{ phone }}</a>.
+          If you prefer, simply reply to this email or contact us:
+        </p>
+        <ul style="margin:8px 0 0 20px;padding:0;color:#555;">
+          <li>Phone: <a href="tel:{{ phone }}" style="color:#0b6efd;text-decoration:none;">{{ phone }}</a></li>
+          <li>Email: <a href="mailto:{{ email }}" style="color:#0b6efd;text-decoration:none;">{{ email }}</a></li>
+        </ul>
+        <p style="margin:12px 0 0 0;color:#555;">
           Our licensed agents are happy to answer any questions and help you find the right coverage for your business.
         </p>
       </td>
@@ -90,7 +95,8 @@
       <td style="padding:18px 32px;background:#fbfbfc;color:#666;font-size:13px;">
         <p style="margin:0 0 6px 0;">
           {{ company_name }} · {{ company_address }} · 
-          <a href="tel:{{ phone }}" style="color:#0b6efd;text-decoration:none;">{{ phone }}</a>
+          <a href="tel:{{ phone }}" style="color:#0b6efd;text-decoration:none;">{{ phone }}</a> · 
+          <a href="mailto:{{ email }}" style="color:#0b6efd;text-decoration:none;">{{ email }}</a>
         </p>
         {% if license_number %}
         <p style="margin:0 0 6px 0;">
