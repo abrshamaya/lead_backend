@@ -82,8 +82,7 @@ def fetch_and_scrape_task(data):
                 lead.save()
 
                 leads_added += 1
-
-                # emails = place.get('emails', [])
+                emails = place.get('emails', [])
                 if emails:
                     for email in emails:
                         email_model = Email(

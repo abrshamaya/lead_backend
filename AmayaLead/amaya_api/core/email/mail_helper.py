@@ -21,7 +21,7 @@ def send_mail_to_lead(lead_email, business_name):
     context = {
         "subject": f"Business insurance options for {business_name}",
         "recipient_business_name": f"{business_name}",
-        "company_name": "Amaya Insurance Co.",
+        "company_name": "Remedy Insurance and taxes.",
         "company_address": "500 Market Street, New York, NY 10001",
         "license_number": "LIC-1234567",
         "phone": "+15712772462",
