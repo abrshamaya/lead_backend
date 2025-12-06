@@ -353,6 +353,7 @@ def send_email_to_lead(request):
                     "conversation": conversation,
                     "business_name": lead.name,
                     "our_email": settings.DEFAULT_FROM_EMAIL,
+                    "lead_email": email_addr,  # For reliable message direction detection
                     "num_suggestions": 1  # Just get the best suggestion
                 }
                 
@@ -553,6 +554,7 @@ def generate_ai_reply(request):
         "conversation": conversation,
         "business_name": lead.name,
         "our_email": settings.DEFAULT_FROM_EMAIL,
+        "lead_email": email,  # For reliable message direction detection
         "num_suggestions": num_suggestions
     }
     

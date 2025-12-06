@@ -153,6 +153,17 @@ def fetch_and_scrape_places(req: FetchRequest):
         else:
             place['scrape_error'] = 'No Website Found'
 
+        # Filter emails using AI if we found any
+        if place.get('emails'):
+            business_name = place.get('displayName', {}).get('text', '')
+            if business_name:
+                try:
+                    filtered_emails = filter_emails(business_name, place['emails'])
+                    place['emails'] = filtered_emails
+                except Exception as e:
+                    logger.warning(f"Email filtering failed for {business_name}: {e}")
+                    # Keep original emails if filtering fails
+
     return res
 
 class PlacesRequest(BaseModel):
@@ -246,7 +257,8 @@ class MessageModel(BaseModel):
 class GenerateReplyRequest(BaseModel):
     conversation: List[MessageModel]
     business_name: str
-    our_email: str  # The email we send from (to identify our messages in conversation)
+    our_email: str  # The email we send from
+    lead_email: str  # The lead's email (to identify message direction reliably)
     num_suggestions: Optional[int] = 3
 
 
@@ -271,6 +283,7 @@ def generate_reply(req: GenerateReplyRequest) -> List[AiSuggestion]:
             conversation=conversation_dicts,
             business_name=req.business_name,
             our_email=req.our_email,
+            lead_email=req.lead_email,
             num_suggestions=req.num_suggestions or 3
         )
         

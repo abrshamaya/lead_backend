@@ -51,6 +51,7 @@ def generate_reply_suggestions(
     conversation: List[Message],
     business_name: str,
     our_email: str,
+    lead_email: str,
     num_suggestions: int = 3
 ) -> List[AiSuggestion]:
     """
@@ -59,7 +60,8 @@ def generate_reply_suggestions(
     Args:
         conversation: List of Message objects representing the conversation history
         business_name: Name of the business lead
-        our_email: Our email address (to identify which messages are from us)
+        our_email: Our current email address
+        lead_email: The lead's email (used to reliably identify message direction)
         num_suggestions: Number of reply suggestions to generate (default: 3)
     
     Returns:
@@ -69,14 +71,22 @@ def generate_reply_suggestions(
     # Format conversation for the prompt, clearly marking who sent each message
     formatted_conversation = []
     for msg in conversation:
-        sender_email = msg.get('sender_email', '')
-        sender_name = msg.get('sender_name', sender_email or 'Unknown')
+        sender_email = msg.get('sender_email', '').lower()
+        receiver_email = msg.get('receiver_email', '').lower()
+        sender_name = msg.get('sender_name', '') or sender_email or 'Unknown'
+        lead_email_lower = lead_email.lower()
         
         # Determine if this message is from us or the lead
-        if sender_email.lower() == our_email.lower():
+        # Use lead_email for reliable detection (works even if our email changed)
+        # - If receiver_email == lead_email, we sent this message TO the lead
+        # - If sender_email == lead_email, the lead sent this message TO us
+        if receiver_email == lead_email_lower:
             role = "US (Insurance Agent)"
-        else:
+        elif sender_email == lead_email_lower:
             role = f"LEAD ({business_name})"
+        else:
+            # Fallback: check our current email
+            role = "US (Insurance Agent)" if sender_email == our_email.lower() else f"LEAD ({business_name})"
         
         formatted_conversation.append(f"[{msg.get('date', 'Unknown date')}] {role} - {sender_name}:\n{msg.get('msg', '')}")
     
