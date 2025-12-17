@@ -32,9 +32,9 @@ def send_mail_to_lead(lead_email, business_name):
         "phone": "703-212-9131",
         "email":"mummedm@mahfuzinsagency.com",
         "product_name": "Business Liability and Property Coverage",
-        "logo_url": "https://cdn.securesure.com/logo.png",
-        "cta_url": "https://securesure.com/quote/?lead_id=abc123",
-        "unsubscribe_url": "https://securesure.com/unsubscribe/",
+        "logo_url": "https://www.mahfuzinsagency.com/img/mahfuz-insurance.png",
+        "cta_url": "https://www.mahfuzinsagency.com/",
+        "unsubscribe_url": "https://www.mahfuzinsagency.com/unsubscribe/",
     }
     plain_msg = render_to_string("email_template.txt", context)
     html_msg = render_to_string("email_template.html", context)
