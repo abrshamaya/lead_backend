@@ -33,7 +33,7 @@ def send_mail_to_lead(lead_email, business_name):
         "email":"mummedm@mahfuzinsagency.com",
         "product_name": "Business Liability and Property Coverage",
         "logo_url": "https://www.mahfuzinsagency.com/img/mahfuz-insurance.png",
-        "cta_url": "https://www.mahfuzinsagency.com/",
+        "cta_url": "https://shortifyme.co/4QQYO",
         "unsubscribe_url": "https://www.mahfuzinsagency.com/unsubscribe/",
     }
     plain_msg = render_to_string("email_template.txt", context)
