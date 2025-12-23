@@ -1,5 +1,5 @@
 import os
-from amaya_api.models import CallStatus
+from amaya_api.models import CallStatus,Lead,CallConversations
 from dotenv import load_dotenv
 from elevenlabs import (
     ElevenLabs,
@@ -11,7 +11,7 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 AGENT_ID = os.getenv("AGENT_ID")
 AGENT_PHONE_NUMBER_ID = os.getenv("AGENT_PHONE_NUMBER_ID")
 
-client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+client = ElevenLabs(base_url="https://api.elevenlabs.io/",api_key=ELEVENLABS_API_KEY)
 
 
 
@@ -65,7 +65,9 @@ Keep the conversation brief, friendly, and helpful while gathering only what is 
 """
 
 
-def make_outbound_call(business_name: str, to_number: str):
+def make_outbound_call(lead:Lead, to_number: str):
+    # TODO: Edit first message so users can initate call with first message
+    business_name = str(lead.name) if lead.name else ""
     prompt = build_prompt(business_name)
 
     result = client.conversational_ai.twilio.outbound_call(
@@ -110,11 +112,13 @@ def make_outbound_call(business_name: str, to_number: str):
         },
     )
     success= result.success
-    status = CallStatus.Status.INITIATED if result.success else CallStatus.Status.FAILED
+    status = CallConversations.Status.INITIATED if result.success else CallStatus.Status.FAILED
     conversation_id = result.conversation_id or ""
     call_sid = result.call_sid or ""
+    print(conversation_id)
 
-    CallStatus(
+    CallConversations(
+        lead=lead,
         success=success,
         status = status,
         conversation_id=conversation_id,
@@ -125,3 +129,17 @@ def make_outbound_call(business_name: str, to_number: str):
 
     return result
 
+def get_audio(conversation_id:str):
+    # Returns an audio generator
+    audio = client.conversational_ai.conversations.audio.get(
+        conversation_id=conversation_id
+    )
+    return audio
+def get_conversation_status(conversation_id:str):
+
+    res = client.conversational_ai.conversations.get(
+        conversation_id=conversation_id
+    )
+    print("result is ", res.status)
+
+    return res.status or ""

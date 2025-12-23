@@ -48,3 +48,28 @@ class CallStatus(models.Model):
 
     def __str__(self):
         return f"{self.status} ({self.conversation_id})"
+
+class CallConversations(models.Model):
+    class Status(models.TextChoices):
+        INITIATED = 'initiated', 'Initiated'
+        INPROGRESS = 'in-progress', 'In Progress'
+        PROCESSING = 'processing', 'Processing'
+        DONE = 'done', 'Done'
+        FAILED = 'failed', 'Failed'
+    lead = models.ForeignKey(Lead, on_delete = models.CASCADE,related_name='call_conversations')
+
+    success = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        default=Status.INITIATED
+    )
+    conversation_id = models.CharField(max_length=128, default='')
+    call_sid = models.CharField(max_length=128, default='')
+    created_at = models.DateField(auto_now_add = True)
+
+    def __str__(self):
+        return f"{self.status} ({self.conversation_id})"
+    @classmethod
+    def is_valid_status(cls, status:str) -> bool:
+        return status in cls.Status.values

@@ -1,6 +1,7 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes
 from datetime import timedelta
+from django.http import StreamingHttpResponse,HttpResponseBadRequest
 from django.utils import timezone
 from rest_framework.parsers import JSONParser
 from django_q.tasks import async_task,schedule
@@ -8,14 +9,14 @@ from django_q.models import Task
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.conf import settings
-from .models import Lead, Email
+from .models import Lead, Email,CallConversations
 from .core.places.places_api import fetch_places_by_query
 from amaya_api.core.email.mail_helper import send_mail_to_lead,get_conversation
 from datetime import timedelta
 from django.utils import timezone
 from django_q.tasks import async_task,schedule
 from amaya_api.core.email.mail_helper import send_mail_to_lead,send_email
-from amaya_api.core.calls.call_helper import make_outbound_call
+from amaya_api.core.calls.call_helper import make_outbound_call,get_conversation_status,get_audio
 from .core.tasks.task import fetch_and_scrape_task
 from rest_framework.response import Response
 from django.forms.models import model_to_dict
@@ -426,11 +427,16 @@ def call_lead(request):
         if not(p_number):
             return Response({"detail":"Lead has no phone number"},status=status.HTTP_404_NOT_FOUND)
         else:
-            schedule("amaya_api.core.calls.call_helper.make_outbound_call",
-                            lead.name,"+15712772462",
-                            schedule_type='O',next_run=timezone.now()+timedelta(minutes=CALL_DELAY_IN_MINS),repeats=1)
-            lead.call_sent = True
-            lead.save()
+            # schedule("amaya_api.core.calls.call_helper.make_outbound_call",
+            #                 lead,p_number,
+            #                 schedule_type='O',next_run=timezone.now()+timedelta(minutes=CALL_DELAY_IN_MINS),repeats=1)
+            # lead.call_sent = True
+            try:
+                make_outbound_call(lead,p_number)
+                lead.call_sent = True
+                lead.save()
+            except Exception as e:
+                pass
             return Response(
                         {"detail": "Call Sent Sucessfully"},
                         status=status.HTTP_200_OK
@@ -491,11 +497,56 @@ def get_emailed_leads(request):
 
 @api_view(['GET'])
 def get_called_leads(request):
-    leads = Lead.objects.filter(call_sent=True)
+    leads = Lead.objects.filter(call_conversations__isnull=False).distinct()
+    print(CallConversations.objects.all())
     data = [model_to_dict(lead) for lead in leads]
     return Response({
                         'leads':data
                     })
+
+@api_view(['GET'])
+def get_lead_call_conversations(request):
+    """
+       Returns an array of conversation had with Lead sorted chronologically, from oldest to newest 
+    """
+    place_id = request.query_params.get("place_id","")
+    lead = get_object_or_404(Lead,place_id=place_id)
+
+    conversations = lead.call_conversations.order_by('-created_at')
+    for conversation in conversations:
+        if conversation.status != CallConversations.Status.FAILED and conversation.status != CallConversations.Status.DONE :
+            call_status = get_conversation_status(conversation.conversation_id)
+            if call_status and CallConversations.is_valid_status(call_status):
+                conversation.status = call_status
+            else:
+                conversation.status = CallConversations.Status.FAILED
+            conversation.save(update_fields=['status'])
+
+
+    data = [model_to_dict(c) for c in conversations]
+    return Response({
+                        "conversations": data
+                    },status=status.HTTP_200_OK)
+
+    pass
+@api_view(['GET'])
+def get_lead_call_conversation_audio(request):
+    """Streams the call audio from ElevenLabs"""
+
+    place_id = request.query_params.get("place_id", "")
+    conversation_id = request.query_params.get("conversation_id", "")
+    lead = get_object_or_404(Lead,place_id=place_id)
+
+    exists = lead.call_conversations.filter(conversation_id = conversation_id).exists()
+
+    if exists:
+        audio_stream = get_audio(conversation_id)
+        return StreamingHttpResponse(
+            audio_stream,
+            content_type="audio/mpeg"
+        )
+    else:
+        return HttpResponseBadRequest("conversation_id is invalid")
 
 @api_view(['POST'])
 @parser_classes([JSONParser])
