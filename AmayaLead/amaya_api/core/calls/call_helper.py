@@ -106,35 +106,46 @@ def make_outbound_call(lead: Lead, to_number: str):
     business_name = str(lead.name) if lead.name else ""
     prompt = build_prompt(business_name)
 
-    result = client.conversational_ai.twilio.outbound_call(
-        agent_id=AGENT_ID,
-        agent_phone_number_id=AGENT_PHONE_NUMBER_ID,
-        to_number=to_number,
-        conversation_initiation_client_data={
-            "conversation_config_override": {
-                "agent": {
-                    "first_message": (
-                        f"Hi, this is Maya calling from Mafuz Insurance. "
-                        f"We specialize in commercial insurance for businesses, "
-                        f"and I wanted to check whether {business_name} is currently reviewing coverage "
-                        f"or open to comparing rates. Do you have a moment to talk?"
-                    ),
-                    "prompt": {"prompt": prompt},
-                    "tools": _TOOLS,
-                }
+    print(f"[call] ▶ Initiating call → {business_name} ({to_number})")
+    print(f"[call]   agent_id={AGENT_ID}  phone_number_id={AGENT_PHONE_NUMBER_ID}")
+
+    try:
+        result = client.conversational_ai.twilio.outbound_call(
+            agent_id=AGENT_ID,
+            agent_phone_number_id=AGENT_PHONE_NUMBER_ID,
+            to_number=to_number,
+            conversation_initiation_client_data={
+                "conversation_config_override": {
+                    "agent": {
+                        "first_message": (
+                            f"Hi, this is Maya calling from Mafuz Insurance. "
+                            f"We specialize in commercial insurance for businesses, "
+                            f"and I wanted to check whether {business_name} is currently reviewing coverage "
+                            f"or open to comparing rates. Do you have a moment to talk?"
+                        ),
+                        "prompt": {"prompt": prompt},
+                        "tools": _TOOLS,
+                    }
+                },
+                "dynamic_variables": {
+                    "business_name": business_name,
+                    "customer_type": "enterprise",
+                },
             },
-            "dynamic_variables": {
-                "business_name": business_name,
-                "customer_type": "enterprise",
-            },
-        },
-    )
+        )
+    except Exception as exc:
+        print(f"[call] ✗ ElevenLabs API error: {exc}")
+        raise
 
     success = result.success
     status = CallConversations.Status.INITIATED if result.success else CallConversations.Status.FAILED
     conversation_id = result.conversation_id or ""
     call_sid = result.call_sid or ""
-    print(f"[call] conversation_id={conversation_id} success={success}")
+    print(f"[call] {'✓' if success else '✗'} success={success}  conversation_id={conversation_id}  call_sid={call_sid}")
+    if not success:
+        msg = getattr(result, 'message', None) or 'ElevenLabs returned success=False'
+        print(f"[call] ✗ Full result object: {vars(result) if hasattr(result, '__dict__') else result}")
+        raise RuntimeError(f"Call failed: {msg}")
 
     CallConversations(
         lead=lead,

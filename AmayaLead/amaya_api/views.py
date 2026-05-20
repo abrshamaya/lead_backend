@@ -414,6 +414,24 @@ def purge_stale_schedules(request):
     ).delete()
     return Response({'deleted': deleted})
 
+
+@api_view(['DELETE'])
+def delete_email_conversation(request):
+    """Remove a specific email address from a lead's email list."""
+    place_id = request.query_params.get('place_id', '')
+    email_addr = request.query_params.get('email', '')
+    if not place_id or not email_addr:
+        return Response({'error': 'place_id and email are required'}, status=400)
+    lead = get_object_or_404(Lead, place_id=place_id)
+    deleted, _ = Email.objects.filter(business=lead, email=email_addr).delete()
+    if deleted == 0:
+        return Response({'error': 'Email not found'}, status=404)
+    if not lead.emails.exists():
+        lead.email_sent = False
+        lead.save(update_fields=['email_sent'])
+    return Response({'success': True})
+
+
 @api_view(['POST'])
 def send_email(request):
     email_rece = request.data.get("to_email","")
@@ -579,6 +597,10 @@ def call_lead(request):
             return Response({"detail": "Call Sent Successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             print(f"[call_lead] error: {str(e)}")
+            try:
+                notify_call_failed(lead, "")
+            except Exception:
+                pass
             return Response(
                 {"error": f"Failed to initiate call: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
