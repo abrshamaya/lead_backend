@@ -19,5 +19,8 @@ urlpatterns = [
     path("lead_call_conversation_audio",views.get_lead_call_conversation_audio, name="Called Leads"),
     path("email_history", views.get_email_history, name="get conversation history"),
     path("send_email_message_to_lead", views.send_email, name="sends a message to lead"),
-    path("generate_ai_reply", views.generate_ai_reply, name="generate AI reply suggestions")
+    path("generate_ai_reply", views.generate_ai_reply, name="generate AI reply suggestions"),
+    path("notifications", views.get_notifications, name="get notifications"),
+    path("notifications/mark_read", views.mark_notifications_read, name="mark notifications read"),
+    path("notifications/mark_all_read", views.mark_all_notifications_read, name="mark all notifications read"),
 ]

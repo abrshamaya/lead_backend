@@ -9,7 +9,7 @@ from django_q.models import Task
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.conf import settings
-from .models import Lead, Email,CallConversations
+from .models import Lead, Email, CallConversations, Notification
 from .core.places.places_api import fetch_places_by_query
 from amaya_api.core.email.mail_helper import send_mail_to_lead,get_conversation
 from datetime import timedelta
@@ -18,6 +18,7 @@ from django_q.tasks import async_task,schedule
 from amaya_api.core.email.mail_helper import send_mail_to_lead,send_email
 from amaya_api.core.calls.call_helper import make_outbound_call,get_conversation_status,get_audio
 from .core.tasks.task import fetch_and_scrape_task
+from amaya_api.core.notifications import notify_call_initiated, notify_call_completed, notify_call_failed
 from rest_framework.response import Response
 from django.forms.models import model_to_dict
 from django.shortcuts import get_object_or_404
@@ -445,9 +446,13 @@ def call_lead(request):
     if calls_today < call_daily_limit:
         # Capacity today — fire immediately
         try:
-            make_outbound_call(lead, p_number)
+            result = make_outbound_call(lead, p_number)
             lead.call_sent = True
             lead.save()
+            try:
+                notify_call_initiated(lead, result.conversation_id or "", p_number)
+            except Exception:
+                pass
             return Response({"detail": "Call Sent Successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             print(f"[call_lead] error: {str(e)}")
@@ -553,13 +558,24 @@ def get_lead_call_conversations(request):
 
     conversations = lead.call_conversations.order_by('-created_at')
     for conversation in conversations:
-        if conversation.status != CallConversations.Status.FAILED and conversation.status != CallConversations.Status.DONE :
+        if conversation.status not in (CallConversations.Status.FAILED, CallConversations.Status.DONE):
+            prev_status = conversation.status
             call_status = get_conversation_status(conversation.conversation_id)
             if call_status and CallConversations.is_valid_status(call_status):
                 conversation.status = call_status
             else:
                 conversation.status = CallConversations.Status.FAILED
             conversation.save(update_fields=['status'])
+
+            # Fire a notification the first time we reach a terminal state
+            if prev_status not in (CallConversations.Status.DONE, CallConversations.Status.FAILED):
+                try:
+                    if conversation.status == CallConversations.Status.DONE:
+                        notify_call_completed(lead, conversation.conversation_id)
+                    elif conversation.status == CallConversations.Status.FAILED:
+                        notify_call_failed(lead, conversation.conversation_id)
+                except Exception:
+                    pass
 
 
     data = [model_to_dict(c) for c in conversations]
@@ -664,4 +680,35 @@ def generate_ai_reply(request):
             {"error": f"Failed to generate AI reply: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['GET'])
+def get_notifications(request):
+    """Return the 50 most recent notifications."""
+    unread_only = request.query_params.get('unread') == 'true'
+    qs = Notification.objects.all()
+    if unread_only:
+        qs = qs.filter(read=False)
+    notifications = list(qs[:50].values(
+        'id', 'type', 'title', 'body', 'read', 'created_at', 'metadata',
+        'lead_id',
+    ))
+    return Response(notifications)
+
+
+@api_view(['POST'])
+@parser_classes([JSONParser])
+def mark_notifications_read(request):
+    """Mark specific notifications as read by id list."""
+    ids = request.data.get('ids', [])
+    if ids:
+        Notification.objects.filter(id__in=ids).update(read=True)
+    return Response({'status': 'ok'})
+
+
+@api_view(['POST'])
+def mark_all_notifications_read(request):
+    """Mark all unread notifications as read."""
+    Notification.objects.filter(read=False).update(read=True)
+    return Response({'status': 'ok'})
 

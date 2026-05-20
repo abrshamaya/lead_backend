@@ -7,6 +7,7 @@ from django_q.tasks import schedule
 from django_q.models import Task, Schedule
 from django.conf import settings
 from amaya_api.models import Lead, Email
+from amaya_api.core.notifications import notify_scrape_done
 
 
 if os.getenv("DJANGO_ENV") != "prod":
@@ -154,5 +155,11 @@ def fetch_and_scrape_task(data):
                         next_run=next_run,
                         repeats=1,
                     )
+
+    task_name = data.get("query", "unknown")
+    try:
+        notify_scrape_done(leads_added, task_name)
+    except Exception as e:
+        print(f"[task] Failed to create scrape notification: {e}")
 
     return f"{leads_added} New Leads"

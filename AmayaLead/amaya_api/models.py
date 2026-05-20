@@ -73,3 +73,27 @@ class CallConversations(models.Model):
     @classmethod
     def is_valid_status(cls, status:str) -> bool:
         return status in cls.Status.values
+
+
+class Notification(models.Model):
+    class Type(models.TextChoices):
+        EMAIL_REPLY     = 'email_reply',     'Email Reply'
+        CALL_INITIATED  = 'call_initiated',  'Call Initiated'
+        CALL_COMPLETED  = 'call_completed',  'Call Completed'
+        CALL_FAILED     = 'call_failed',     'Call Failed'
+        SCRAPE_DONE     = 'scrape_done',     'Scrape Done'
+
+    type       = models.CharField(max_length=50, choices=Type.choices)
+    lead       = models.ForeignKey(Lead, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
+    title      = models.CharField(max_length=255)
+    body       = models.TextField(blank=True, default='')
+    read       = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    # Extra data: email address, conversation_id, leads_added, etc.
+    metadata   = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.type}] {self.title}"
