@@ -338,6 +338,8 @@ def list_tasks(request):
         })
 
     # Queued tasks (waiting for a worker to pick them up)
+    STALE_MINUTES = 10
+    stale_cutoff = timezone.now() - timedelta(minutes=STALE_MINUTES)
     queued = []
     for q in OrmQ.objects.all().order_by('lock'):
         try:
@@ -346,17 +348,29 @@ def list_tasks(request):
             name = payload.get('name', '') if isinstance(payload, dict) else ''
         except Exception:
             func, name = '', ''
+
+        if q.lock and q.lock < stale_cutoff:
+            # Worker locked this task but never finished — treat as failed
+            q_status = 'failed'
+            q_result = f'Task locked {int((timezone.now() - q.lock).total_seconds() // 60)}m ago but never completed (worker may have crashed)'
+        elif q.lock:
+            q_status = 'running'
+            q_result = None
+        else:
+            q_status = 'scheduled'
+            q_result = None
+
         queued.append({
             'id': f"q-{q.id}",
             'name': _readable_name(name, func),
             'func': func,
             'started': q.lock,
             'stopped': None,
-            'result': None,
+            'result': q_result,
             'success': None,
             'attempt_count': 0,
             'kind': _task_kind(func),
-            'status': 'running' if q.lock else 'scheduled',
+            'status': q_status,
         })
 
     # Pending scheduled tasks
