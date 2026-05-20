@@ -291,6 +291,28 @@ def _task_kind(func: str) -> str:
     return 'other'
 
 
+_FUNC_LABELS = {
+    'send_mail_to_lead':         'Send Email',
+    'fetch_and_scrape_task':     'Scrape Leads',
+    'check_email_replies_task':  'Check Email Replies',
+    'make_outbound_call':        'Outbound Call',
+}
+
+def _readable_name(name: str | None, func: str) -> str:
+    """Return a human-readable task name.
+
+    Django Q auto-generates names like 'winner-queen-kitten-alabama' when no
+    task_name is given. Detect these and replace with a label derived from the
+    func name instead.
+    """
+    import re
+    fn_leaf = func.split('.')[-1] if func else ''
+    # Auto-generated: all lowercase letters and hyphens, 3+ segments
+    if not name or re.fullmatch(r'[a-z]+(-[a-z]+){2,}', name):
+        return _FUNC_LABELS.get(fn_leaf, fn_leaf.replace('_', ' ').title())
+    return name
+
+
 @api_view(['GET'])
 def list_tasks(request):
     from django_q.models import Schedule
@@ -308,6 +330,7 @@ def list_tasks(request):
             task_status = 'running'
         completed.append({
             **t,
+            'name': _readable_name(t['name'], t['func'] or ''),
             'kind': _task_kind(t['func'] or ''),
             'status': task_status,
         })
@@ -319,7 +342,7 @@ def list_tasks(request):
     ):
         scheduled.append({
             'id': f"sched-{s['id']}",
-            'name': s['name'] or s['func'].split('.')[-1],
+            'name': _readable_name(s['name'], s['func'] or ''),
             'func': s['func'],
             'started': s['next_run'],
             'stopped': None,

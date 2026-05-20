@@ -151,6 +151,7 @@ def fetch_and_scrape_task(data):
                         EMAIL_FUNC,
                         email_addr,
                         name,
+                        name=f"Email → {name} <{email_addr}>",
                         schedule_type='O',
                         next_run=next_run,
                         repeats=1,
