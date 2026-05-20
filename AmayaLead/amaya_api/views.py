@@ -286,7 +286,7 @@ def _task_kind(func: str) -> str:
     f = func.lower()
     if 'scrape' in f or 'fetch_and' in f:    return 'scrape'
     if 'mail' in f or 'email' in f:           return 'email'
-    if 'call' in f:                           return 'call'
+    if 'call' in f or 'outbound' in f:        return 'call'
     if 'imap' in f or 'replies' in f:        return 'system'
     return 'other'
 
@@ -296,6 +296,7 @@ _FUNC_LABELS = {
     'fetch_and_scrape_task':     'Scrape Leads',
     'check_email_replies_task':  'Check Email Replies',
     'make_outbound_call':        'Outbound Call',
+    'schedule_outbound_call':    'Outbound Call',
 }
 
 def _readable_name(name: str | None, func: str) -> str:
@@ -563,6 +564,7 @@ def call_lead(request):
                 CALL_FUNC,
                 lead.place_id,
                 p_number,
+                name=f"Call → {lead.name} ({p_number})",
                 schedule_type='O',
                 next_run=next_run,
                 repeats=1,
