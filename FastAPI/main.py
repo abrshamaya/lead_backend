@@ -3,6 +3,7 @@ from places.places_api import fetch_places_by_query
 from AI.filter_emails import filter_emails
 from AI.generate_reply import generate_reply_suggestions, Message as AIMessage, AiSuggestion
 from providers.apify_fetch import fetch_places_by_query_via_apify
+from scraper.utils import is_junk_email
 from pydantic import BaseModel
 import sys
 import tempfile
@@ -101,7 +102,7 @@ def fetch_and_scrape_places(req: FetchRequest):
 
             try:
                 proc = subprocess.Popen(
-                    args=[sys.executable, '-m', 'scraper_worker', url, '1', '5', tmp_filename],
+                    args=[sys.executable, '-m', 'scraper_worker', url, '2', '5', tmp_filename],
                     text=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE
@@ -153,7 +154,11 @@ def fetch_and_scrape_places(req: FetchRequest):
         else:
             place['scrape_error'] = 'No Website Found'
 
-        # Filter emails using AI if we found any
+        # Pre-filter obvious junk before spending AI quota
+        if place.get('emails'):
+            place['emails'] = [e for e in place['emails'] if not is_junk_email(e)]
+
+        # Filter remaining emails with AI
         if place.get('emails'):
             business_name = place.get('displayName', {}).get('text', '')
             if business_name:
@@ -162,7 +167,7 @@ def fetch_and_scrape_places(req: FetchRequest):
                     place['emails'] = filtered_emails
                 except Exception as e:
                     logger.warning(f"Email filtering failed for {business_name}: {e}")
-                    # Keep original emails if filtering fails
+                    # Keep pre-filtered emails if AI filter fails
 
     return res
 
