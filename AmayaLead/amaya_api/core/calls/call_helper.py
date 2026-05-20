@@ -1,72 +1,108 @@
 import os
-from amaya_api.models import CallStatus,Lead,CallConversations
+from amaya_api.models import CallStatus, Lead, CallConversations
 from dotenv import load_dotenv
-from elevenlabs import (
-    ElevenLabs,
-)
+from elevenlabs import ElevenLabs
 
 load_dotenv()
 
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 AGENT_ID = os.getenv("AGENT_ID")
 AGENT_PHONE_NUMBER_ID = os.getenv("AGENT_PHONE_NUMBER_ID")
+CALLBACK_NUMBER = "+15712772462"
 
-client = ElevenLabs(base_url="https://api.elevenlabs.io/",api_key=ELEVENLABS_API_KEY)
-
+client = ElevenLabs(base_url="https://api.elevenlabs.io/", api_key=ELEVENLABS_API_KEY)
 
 
 def build_prompt(business_name: str) -> str:
-    return f"""
-You are an outbound phone representative for Mafuz Insurance, a trusted provider of commercial insurance for businesses of all sizes.
+    return f"""You are Maya, a professional outbound phone representative for Mafuz Insurance.
 
-Your job is to professionally contact business owners or managers who may benefit from updated insurance coverage.
+This call is for: {business_name}
 
-This call is for the business: {business_name}
-
-Before speaking, lightly infer what type of business this might be based on the name. 
-Use that only to guide small, natural comments in the conversation. 
-Do not over-explain, make assumptions sound extreme, or go into deep detail.
-
-Primary Objectives (keep the call short and simple):
-1. Introduce yourself and Mafuz Insurance in a friendly, professional manner.
+==== PRIMARY OBJECTIVES ====
+1. Introduce yourself as Maya from Mafuz Insurance — briefly.
 2. Confirm you are speaking with the decision-maker or person who handles insurance.
-3. Ask if they currently have business insurance.
-4. Ask if they’re open to comparing rates or receiving a quick quote.
-5. If they show interest, collect only the essential details:
-   - Business name
-   - Nature of the business (keep this one line, simple)
-   - Current insurer (if any)
-   - Any coverage concerns they want improved
-   - Best contact email
-6. If they are not interested, thank them politely and end the call.
+3. Ask if they currently have business insurance and if they'd be open to comparing rates.
+4. If interested: collect business name, type of business, current insurer (if any), coverage concerns, best contact email.
+5. If not interested: thank them, then IMMEDIATELY USE THE end_call TOOL — do not linger.
 
-Tone & Delivery:
-- Warm, confident, respectful.
-- Keep answers short, clear, and natural.
-- Never overwhelm them with too many questions—only ask what’s needed.
-- Never push or sound scripted.
-- Never mention being AI or virtual.
+==== WHEN TO USE end_call TOOL ====
+You MUST invoke the end_call tool (not just say goodbye) in ALL of these situations:
+- The person says they are not interested or asks you to stop calling
+- You have finished leaving a voicemail — call end_call immediately after the message ends
+- Silence lasts more than 5 seconds — say "It seems now isn't a good time, I'll let you go. Have a great day." then call end_call
+- You detect an IVR, automated phone tree, or hold music — call end_call immediately, do not press any buttons
+- The call has had no human response after 15 seconds
+- You have successfully collected all needed information — say goodbye then call end_call
 
-Behavioral Guidelines:
-- Detect whether the line is using a recording system:
-  * If it is a standard business voicemail or automated "record your message" system, leave the official voicemail message.
-  * If the system indicates the call is actively being recorded, briefly acknowledge this and offer them the option to call back.
-- If the customer requests email information, respond with: “I’ll have the team send that over to you.”
-- For voicemail, leave this exact message:
-  “Hi, this is Maya from Mafuz Insurance. We’re reaching out to offer competitive commercial insurance options for your business. Feel free to call us back at +15712772462. Thank you.”
+==== AUTOMATED SYSTEM & IVR DETECTION ====
+If you hear ANY of the following, use the voicemail_detection tool immediately:
+- "Press 1 for...", "For [department] press [number]", any button-press prompts
+- "Please hold", "Your call is being transferred", "Your call is important to us"
+- Hold music or silence followed by music
+- A pre-recorded announcement or robotic/synthesized voice
+- "This call may be recorded for quality purposes"
+- Any repeated automated loop or prompt
+Do NOT attempt to navigate phone trees. Do NOT press any numbers. Use voicemail_detection, then end_call.
 
-Silence Handling:
-- If the person is silent for more than 5 seconds, assume they are unavailable and say:
-  “It seems now might not be the best time. I’ll go ahead and let you go. Thank you.”
-- Then end the call immediately.
+==== VOICEMAIL / ANSWERING MACHINE ====
+If you reach voicemail or an answering machine:
+1. Wait for the beep.
+2. Leave ONLY this exact message:
+   "Hi, this is Maya from Mafuz Insurance. We're reaching out about commercial insurance options for {business_name}. Please call us back at {CALLBACK_NUMBER}. Thank you."
+3. USE end_call TOOL IMMEDIATELY after finishing — do not say anything else, do not wait.
 
-Overall Goal:
-Keep the conversation brief, friendly, and helpful while gathering only what is necessary.
+==== SILENCE HANDLING ====
+If the person is silent for more than 5 seconds:
+1. Say: "It seems now isn't a good time. I'll let you go — have a great day."
+2. USE end_call TOOL IMMEDIATELY.
+
+==== TONE & RULES ====
+- Warm, confident, respectful. Keep it short.
+- Never mention being AI, a bot, or virtual.
+- Never overwhelm with questions — one at a time.
+- If asked for email info: "I'll have the team send that over to you."
+- Keep the entire call under 3 minutes.
 """
 
 
-def make_outbound_call(lead:Lead, to_number: str):
-    # TODO: Edit first message so users can initate call with first message
+# Tool definitions are separated so they're easy to update independently
+_TOOLS = [
+    {
+        "type": "system",
+        "name": "end_call",
+        "description": (
+            "USE THIS TOOL TO ACTUALLY HANG UP THE CALL. "
+            "Saying goodbye is not enough — you must invoke this tool to end the call. "
+            "Trigger it in ANY of these situations: "
+            "(1) after 5 seconds of silence — say a short farewell first, then invoke; "
+            "(2) immediately after finishing a voicemail message — no delay; "
+            "(3) when the person says they are not interested — say thank you, then invoke; "
+            "(4) after successfully collecting all needed information — say goodbye, then invoke; "
+            "(5) when an IVR, phone tree, hold music, or automated system is detected — invoke immediately; "
+            "(6) if no human has responded after 15 seconds. "
+            "Do not wait, do not repeat yourself — just invoke the tool."
+        ),
+    },
+    {
+        "type": "system",
+        "name": "voicemail_detection",
+        "description": (
+            "USE THIS TOOL to detect and handle voicemail and automated phone systems. "
+            "Trigger immediately when you detect: "
+            "(1) a voicemail greeting or answering machine beep; "
+            "(2) IVR or phone tree prompts ('Press 1 for...', 'For X press Y'); "
+            "(3) hold music or 'please hold' messages; "
+            "(4) pre-recorded automated announcements or synthesized voices; "
+            "(5) no human response after 10 seconds of the call connecting. "
+            "On voicemail/answering machine: wait for the beep, leave the pre-approved message, "
+            "then invoke end_call immediately. "
+            "On IVR/phone tree: invoke end_call immediately — do NOT press any buttons."
+        ),
+    },
+]
+
+
+def make_outbound_call(lead: Lead, to_number: str):
     business_name = str(lead.name) if lead.name else ""
     prompt = build_prompt(business_name)
 
@@ -84,25 +120,7 @@ def make_outbound_call(lead:Lead, to_number: str):
                         f"or open to comparing rates. Do you have a moment to talk?"
                     ),
                     "prompt": {"prompt": prompt},
-                    "tools": [
-                        {
-                            "type": "system",
-                            "name": "end_call",
-                            "description": "End the call if there is a long period of silence (more than 30 seconds). Before ending, tell the user about Mafuz Insurance and deliver a farewell message to the user.",
-                        },
-                        {
-                            "type": "system",
-                            "name": "voicemail_detection",
-                            "description": """
-
-    - If the line is a voicemail or automated answering system:
-    - Leave this exact message:
-      "Hi, this is Maya from Mafuz Insurance. We’re reaching out to offer competitive commercial insurance options for your business. Feel free to call us back at +15712772462 . Thank you."
-    - Do not attempt further conversation.
-    - Hang up immediately after leaving the message.                                
-                            """,
-                        },
-                    ],
+                    "tools": _TOOLS,
                 }
             },
             "dynamic_variables": {
@@ -111,35 +129,45 @@ def make_outbound_call(lead:Lead, to_number: str):
             },
         },
     )
-    success= result.success
-    status = CallConversations.Status.INITIATED if result.success else CallStatus.Status.FAILED
+
+    success = result.success
+    status = CallConversations.Status.INITIATED if result.success else CallConversations.Status.FAILED
     conversation_id = result.conversation_id or ""
     call_sid = result.call_sid or ""
-    print(conversation_id)
+    print(f"[call] conversation_id={conversation_id} success={success}")
 
     CallConversations(
         lead=lead,
         success=success,
-        status = status,
+        status=status,
         conversation_id=conversation_id,
-        call_sid = call_sid
+        call_sid=call_sid,
     ).save()
-
-
 
     return result
 
-def get_audio(conversation_id:str):
-    # Returns an audio generator
-    audio = client.conversational_ai.conversations.audio.get(
+
+def schedule_outbound_call(place_id: str, to_number: str):
+    """
+    Thin wrapper for Django Q scheduling.  Django Q serialises task args, and
+    passing a full Django model instance can be unreliable.  This function
+    accepts primitive types and does the DB lookup itself so it's safe to
+    schedule via django_q.tasks.schedule().
+    """
+    from amaya_api.models import Lead
+    lead = Lead.objects.get(place_id=place_id)
+    make_outbound_call(lead, to_number)
+
+
+def get_audio(conversation_id: str):
+    return client.conversational_ai.conversations.audio.get(
         conversation_id=conversation_id
     )
-    return audio
-def get_conversation_status(conversation_id:str):
 
+
+def get_conversation_status(conversation_id: str):
     res = client.conversational_ai.conversations.get(
         conversation_id=conversation_id
     )
-    print("result is ", res.status)
-
+    print(f"[call] status for {conversation_id}: {res.status}")
     return res.status or ""

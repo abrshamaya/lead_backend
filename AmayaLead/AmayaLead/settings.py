@@ -97,25 +97,25 @@ CORS_ALLOWED_ORIGINS = [
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
-
-
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB", "lead_db"),
-        "USER": os.getenv("POSTGRES_USER", "lead_user"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "lead_pass"),
-        "HOST": os.getenv("POSTGRES_HOST", "db"),
-        "PORT": os.getenv("POSTGRES_PORT", "5432"),
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+
+
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.postgresql",
+#         "NAME": os.getenv("POSTGRES_DB", "lead_db"),
+#         "USER": os.getenv("POSTGRES_USER", "lead_user"),
+#         "PASSWORD": os.getenv("POSTGRES_PASSWORD", "lead_pass"),
+#         "HOST": os.getenv("POSTGRES_HOST", "db"),
+#         "PORT": os.getenv("POSTGRES_PORT", "5432"),
+#     }
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -143,6 +143,14 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_IMAP_HOST = os.getenv('EMAIL_IMAP_HOST', 'imap.gmail.com')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
+
+# Rate limiting — tune via env vars without redeploying
+# Gmail free: 500/day. Google Workspace: 2000/day. Stay conservative.
+EMAIL_DAILY_LIMIT = int(os.getenv('EMAIL_DAILY_LIMIT', 400))
+EMAIL_MIN_DELAY_MINS = int(os.getenv('EMAIL_MIN_DELAY_MINS', 2))
+
+# ElevenLabs call rate limiting
+CALL_DAILY_LIMIT = int(os.getenv('CALL_DAILY_LIMIT', 50))
 
 
 # Internationalization

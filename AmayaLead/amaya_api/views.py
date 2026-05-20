@@ -405,48 +405,87 @@ def send_email_to_lead(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+CALL_FUNC = 'amaya_api.core.calls.call_helper.schedule_outbound_call'
+CALL_DAY_START_HOUR = 9  # UTC hour to start calls on overflow days
+
+
+def _get_calls_for_date(date) -> int:
+    """Calls already made + calls queued for a given date."""
+    from django_q.models import Schedule as DQSchedule
+    made = CallConversations.objects.filter(created_at=date).count()
+    queued = DQSchedule.objects.filter(func=CALL_FUNC, next_run__date=date).count()
+    return made + queued
+
+
 @api_view(['POST'])
-@parser_classes([JSONParser])             
+@parser_classes([JSONParser])
 def call_lead(request):
-    """
-        Intiates a call with a lead using Eleven labs api 
-    """
+    """Initiates an outbound call to a lead via ElevenLabs.
+    If today's call limit is reached the call is queued for the next
+    available day instead of being rejected."""
+    from datetime import datetime as dt, timezone as dt_tz
+
     place_id = request.data.get("place_id")
     if not place_id:
-        return Response({
-            "detail": "Missing Lead ID",
-            status:status.HTTP_400_BAD_REQUEST
-                        })
-    lead = Lead.objects.filter(place_id = place_id).first()
+        return Response({"detail": "Missing Lead ID"}, status=status.HTTP_400_BAD_REQUEST)
 
+    lead = Lead.objects.filter(place_id=place_id).first()
     if not lead:
-        return Response({
-            "detail":"Lead not found"},status=status.HTTP_404_NOT_FOUND)
-    try:
-        p_number = lead.international_phone_number
-        if not(p_number):
-            return Response({"detail":"Lead has no phone number"},status=status.HTTP_404_NOT_FOUND)
-        else:
-            # schedule("amaya_api.core.calls.call_helper.make_outbound_call",
-            #                 lead,p_number,
-            #                 schedule_type='O',next_run=timezone.now()+timedelta(minutes=CALL_DELAY_IN_MINS),repeats=1)
-            # lead.call_sent = True
-            try:
-                make_outbound_call(lead,p_number)
-                lead.call_sent = True
-                lead.save()
-            except Exception as e:
-                pass
+        return Response({"detail": "Lead not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    p_number = lead.international_phone_number
+    if not p_number:
+        return Response({"detail": "Lead has no phone number"}, status=status.HTTP_404_NOT_FOUND)
+
+    call_daily_limit = getattr(settings, 'CALL_DAILY_LIMIT', 50)
+    call_delay_mins = getattr(settings, 'CALL_MIN_DELAY_MINS', 3)
+    today = timezone.now().date()
+    calls_today = _get_calls_for_date(today)
+
+    if calls_today < call_daily_limit:
+        # Capacity today — fire immediately
+        try:
+            make_outbound_call(lead, p_number)
+            lead.call_sent = True
+            lead.save()
+            return Response({"detail": "Call Sent Successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(f"[call_lead] error: {str(e)}")
             return Response(
-                        {"detail": "Call Sent Sucessfully"},
-                        status=status.HTTP_200_OK
-                    )
-    except Exception as e:
-        print(f"Phone number sending error: {str(e)}")
-        return Response(
-            {"error": f"Failed to send reset email. Error: {str(e)}"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+                {"error": f"Failed to initiate call: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    # Today is full — find the next day with capacity (up to 7 days out)
+    for day_offset in range(1, 8):
+        target_date = today + timedelta(days=day_offset)
+        count = _get_calls_for_date(target_date)
+        if count < call_daily_limit:
+            start = dt(
+                target_date.year, target_date.month, target_date.day,
+                CALL_DAY_START_HOUR, 0, 0,
+                tzinfo=dt_tz.utc,
+            )
+            next_run = start + timedelta(minutes=call_delay_mins * count)
+            schedule(
+                CALL_FUNC,
+                lead.place_id,
+                p_number,
+                schedule_type='O',
+                next_run=next_run,
+                repeats=1,
+            )
+            lead.call_sent = True
+            lead.save()
+            return Response(
+                {"detail": f"Daily limit reached — call queued for {target_date.isoformat()}."},
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+    return Response(
+        {"detail": "No call slots available in the next 7 days."},
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+    )
 @api_view(['GET'])
 def get_email_history(request):
     """

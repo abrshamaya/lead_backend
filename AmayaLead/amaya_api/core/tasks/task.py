@@ -1,62 +1,114 @@
 import os
 import requests
 from django.db import transaction
-import uuid
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone as dt_timezone
 from django.utils import timezone
-from django_q.tasks import async_task,schedule
-from amaya_api.core.email.mail_helper import send_mail_to_lead
-from amaya_api.core.calls.call_helper import make_outbound_call
-import time
+from django_q.tasks import schedule
+from django_q.models import Task, Schedule
+from django.conf import settings
+from amaya_api.models import Lead, Email
 
 
-EMAIL_DELAY_IN_MINS = 1
-CALL_DELAY_IN_MINS = 2
-
-now = timezone.now()
-
-from amaya_api.models import Lead,Email
 if os.getenv("DJANGO_ENV") != "prod":
     SCRAPING_URL = 'http://127.0.0.1:8001'
 else:
     SCRAPING_URL = 'http://scraper:8001'
 
-def fetch_and_scrape_task(data):
-    """
-        Fetches places and scrapes them
-    """
-    response = requests.post(url=f"{SCRAPING_URL}/fetch_and_scrape_places", json=data)
+EMAIL_FUNC = 'amaya_api.core.email.mail_helper.send_mail_to_lead'
+# Business hours start (UTC). Overflow emails land here on their target day.
+EMAIL_DAY_START_HOUR = 9
 
+
+def get_emails_queued_for_date(date) -> int:
+    """Count emails already sent or scheduled for a given calendar date."""
+    sent = Task.objects.filter(
+        func=EMAIL_FUNC,
+        stopped__date=date,
+        success=True,
+    ).count()
+    pending = Schedule.objects.filter(
+        func=EMAIL_FUNC,
+        next_run__date=date,
+    ).count()
+    return sent + pending
+
+
+def fetch_and_scrape_task(data):
+    """Fetches places from the scraper service, saves them, and queues outbound
+    emails.  Emails that exceed today's daily limit roll over to the next
+    available day (up to 7 days ahead) instead of being silently dropped."""
+
+    response = requests.post(url=f"{SCRAPING_URL}/fetch_and_scrape_places", json=data)
     response.raise_for_status()
     result = response.json()
 
-    if not isinstance(result, list) and result['status_code'] == 500:
+    if not isinstance(result, list) and result.get('status_code') == 500:
         raise Exception(result.get('Error Scraping'))
+
+    daily_limit = getattr(settings, 'EMAIL_DAILY_LIMIT', 400)
+    delay_mins = getattr(settings, 'EMAIL_MIN_DELAY_MINS', 2)
+    now = timezone.now()  # captured at execution time, not import time
+
+    # Per-day slot counters initialised from the DB so concurrent runs and
+    # previous runs in the same day are all accounted for.
+    day_counts: dict = {}
+
+    def _count_for(d):
+        if d not in day_counts:
+            day_counts[d] = get_emails_queued_for_date(d)
+        return day_counts[d]
+
+    def _next_run_for(email_addr, name) -> datetime | None:
+        """
+        Find the earliest day that still has capacity, reserve one slot in the
+        in-memory counter, and return the datetime to fire the email.
+        Returns None if no slot found within 7 days.
+        """
+        for day_offset in range(7):
+            d = now.date() + timedelta(days=day_offset)
+            count = _count_for(d)
+            if count >= daily_limit:
+                continue
+
+            # Reserve the slot before scheduling so the next email in this
+            # loop gets the next slot, not the same one.
+            day_counts[d] = count + 1
+
+            if day_offset == 0:
+                # Today — continue staggering from the current moment
+                return now + timedelta(minutes=delay_mins * (count + 1))
+            else:
+                # Future day — start from EMAIL_DAY_START_HOUR UTC
+                start = datetime(
+                    d.year, d.month, d.day,
+                    EMAIL_DAY_START_HOUR, 0, 0,
+                    tzinfo=dt_timezone.utc,
+                )
+                return start + timedelta(minutes=delay_mins * count)
+
+        return None  # no capacity in the next 7 days
+
     leads_added = 0
-    bussiness_name_phone_pairs = []
 
     with transaction.atomic():
         for place in result:
             place_id = place.get("place_id", "")
             if not place_id:
                 continue
-            # Check for lead existance
+
             lead = Lead.objects.filter(place_id=place_id).first()
 
             if lead:
-                # Lead exists maybe update emails
-                existing_emails = set(Email.objects.filter(business=lead).values_list('email',flat=True))
+                existing_emails = set(
+                    Email.objects.filter(business=lead).values_list('email', flat=True)
+                )
                 new_emails = set(place.get('emails', []))
                 emails_to_add = new_emails - existing_emails
                 if emails_to_add:
                     Email.objects.bulk_create(
-                        [
-                            Email(business=lead,email=email) for email in emails_to_add
-                        ]
+                        [Email(business=lead, email=e) for e in emails_to_add]
                     )
-
             else:
-                # create new lead
                 name = place.get("displayName", {}).get('text', '')
                 types = place.get("types", ["unknown"])
                 website = place.get("websiteUri", "")
@@ -65,8 +117,6 @@ def fetch_and_scrape_task(data):
                 national_pn = place.get("nationalPhoneNumber")
                 international_pn = place.get("internationalPhoneNumber", "")
                 scrape_error = place.get("scrape_error", "")
-                if(international_pn):
-                    bussiness_name_phone_pairs.append([name,international_pn])
 
                 lead = Lead(
                     place_id=place_id,
@@ -77,30 +127,32 @@ def fetch_and_scrape_task(data):
                     weekly_opening_hours=opening_hours,
                     national_phone_number=national_pn,
                     international_phone_number=international_pn,
-                    scrape_error=scrape_error
+                    scrape_error=scrape_error,
                 )
                 lead.save()
-
                 leads_added += 1
+
                 emails = place.get('emails', [])
                 if emails:
-                    for email in emails:
-                        email_model = Email(
-                            business=lead,
-                            email=email
+                    Email.objects.bulk_create(
+                        [Email(business=lead, email=e) for e in emails]
+                    )
+
+                for email_addr in emails:
+                    next_run = _next_run_for(email_addr, name)
+                    if next_run is None:
+                        print(
+                            f"[task] No email slots in the next 7 days — "
+                            f"skipping {email_addr} for {name}."
                         )
-                        email_model.save()
-                # Emailing me for now
-                for idx,email in enumerate(emails):
-                    schedule("amaya_api.core.email.mail_helper.send_mail_to_lead",
-                    email,name,
-                    schedule_type='O',next_run=now+timedelta(minutes=EMAIL_DELAY_IN_MINS*(idx+1)),repeats=1)
-                # for idx,pairs in enumerate(bussiness_name_phone_pairs):
-                #     b_name = pairs[0]
-                #     # phone_number = pairs[1]
-                #     # using our phone number for now
-                #     schedule("amaya_api.core.calls.call_helper.make_outbound_call",
-                #     b_name,"+15712772462",
-                #     schedule_type='O',next_run=now+timedelta(minutes=CALL_DELAY_IN_MINS*(idx+1)),repeats=1)
+                        continue
+                    schedule(
+                        EMAIL_FUNC,
+                        email_addr,
+                        name,
+                        schedule_type='O',
+                        next_run=next_run,
+                        repeats=1,
+                    )
 
     return f"{leads_added} New Leads"
