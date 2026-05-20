@@ -16,8 +16,15 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from amaya_api import auth_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('amaya_api.urls'))
+    path('api/', include('amaya_api.urls')),
+    path('api/auth/login', auth_views.login, name='auth-login'),
+    path('api/auth/refresh', auth_views.refresh_token, name='auth-refresh'),
+    path('api/auth/me', auth_views.me, name='auth-me'),
+    path('api/auth/change-password', auth_views.change_password, name='auth-change-password'),
+    path('api/auth/users', auth_views.users, name='auth-users'),
+    path('api/auth/users/<int:user_id>', auth_views.user_detail, name='auth-user-detail'),
 ]

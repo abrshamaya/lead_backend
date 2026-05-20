@@ -15,6 +15,7 @@ django-cors-headers==4.8.0
 django-picklefield==3.3
 django-q2==1.8.0
 djangorestframework==3.16.1
+djangorestframework-simplejwt==5.5.1
 docstring-to-markdown==0.17
 elevenlabs==2.23.0
 fastapi==0.116.1

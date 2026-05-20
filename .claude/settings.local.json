@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -r \"FAKE API\\\\|Mock\\\\|mock\\\\|Math.random\\\\|coming soon\" C:UsersEualDocumentsWebdevJSReactAmayaLeadsamaya_leadsrc --include=*.tsx --include=*.ts)"
+      "Bash(grep -r \"FAKE API\\\\|Mock\\\\|mock\\\\|Math.random\\\\|coming soon\" C:UsersEualDocumentsWebdevJSReactAmayaLeadsamaya_leadsrc --include=*.tsx --include=*.ts)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
