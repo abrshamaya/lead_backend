@@ -373,25 +373,46 @@ def list_tasks(request):
             'status': q_status,
         })
 
-    # Pending scheduled tasks
+    # Pending scheduled tasks — one-shot (repeats=1) entries whose next_run is
+    # more than 30 minutes in the past were never picked up (qcluster was down).
+    # Show them as failed rather than perpetually "pending".
+    OVERDUE_MINUTES = 30
+    overdue_cutoff = timezone.now() - timedelta(minutes=OVERDUE_MINUTES)
+
     scheduled = []
     for s in Schedule.objects.order_by('next_run').values(
-        'id', 'name', 'func', 'next_run'
+        'id', 'name', 'func', 'next_run', 'repeats'
     ):
+        next_run = s['next_run']
+        is_recurring = s['repeats'] != 1  # -1 = run forever, >1 = multiple times
+        overdue = next_run and next_run < overdue_cutoff and not is_recurring
+
         scheduled.append({
             'id': f"sched-{s['id']}",
             'name': _readable_name(s['name'], s['func'] or ''),
             'func': s['func'],
-            'started': s['next_run'],
+            'started': next_run,
             'stopped': None,
-            'result': None,
+            'result': 'Missed scheduled run — qcluster was not running' if overdue else None,
             'success': None,
             'attempt_count': 0,
             'kind': _task_kind(s['func'] or ''),
-            'status': 'scheduled',
+            'status': 'failed' if overdue else 'scheduled',
         })
 
     return Response(completed + queued + scheduled)
+
+
+@api_view(['POST'])
+def purge_stale_schedules(request):
+    """Delete one-shot Schedule entries whose next_run is >30 minutes in the past."""
+    from django_q.models import Schedule as DQSchedule
+    cutoff = timezone.now() - timedelta(minutes=30)
+    deleted, _ = DQSchedule.objects.filter(
+        repeats=1,
+        next_run__lt=cutoff,
+    ).delete()
+    return Response({'deleted': deleted})
 
 @api_view(['POST'])
 def send_email(request):

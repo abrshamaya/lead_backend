@@ -24,4 +24,5 @@ urlpatterns = [
     path("notifications", views.get_notifications, name="get notifications"),
     path("notifications/mark_read", views.mark_notifications_read, name="mark notifications read"),
     path("notifications/mark_all_read", views.mark_all_notifications_read, name="mark all notifications read"),
+    path("tasks/purge_stale", views.purge_stale_schedules, name="purge stale schedules"),
 ]
