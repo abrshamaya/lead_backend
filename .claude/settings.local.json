@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"FAKE API\\\\|Mock\\\\|mock\\\\|Math.random\\\\|coming soon\" C:UsersEualDocumentsWebdevJSReactAmayaLeadsamaya_leadsrc --include=*.tsx --include=*.ts)"
+    ]
+  }
+}

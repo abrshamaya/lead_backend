@@ -19,6 +19,7 @@ def notify_email_reply(lead: Lead, sender_name: str, sender_email: str, message_
             "email": sender_email,
             "sender_name": sender_name,
             "message_id": message_id,
+            "place_id": lead.place_id,
         },
     )
 

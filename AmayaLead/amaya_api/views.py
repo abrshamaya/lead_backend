@@ -683,6 +683,22 @@ def generate_ai_reply(request):
 
 
 @api_view(['GET'])
+def get_stats(request):
+    """Dashboard stats: leads, emails sent, calls made."""
+    from django_q.models import Task as DQTask
+    emails_sent = DQTask.objects.filter(
+        func='amaya_api.core.email.mail_helper.send_mail_to_lead',
+        success=True,
+    ).count()
+    calls_made = CallConversations.objects.count()
+    return Response({
+        'leads': Lead.objects.count(),
+        'emails_sent': emails_sent,
+        'calls_made': calls_made,
+    })
+
+
+@api_view(['GET'])
 def get_notifications(request):
     """Return the 50 most recent notifications."""
     unread_only = request.query_params.get('unread') == 'true'
