@@ -282,14 +282,55 @@ def filter_email(request):
     return Response({"status": "success"})
 
 
-@api_view(['GET'])
-@parser_classes([JSONParser])
-def list_tasks(request):
-    tasks = Task.objects.filter(group='Scrape Group').values('id','name', 'started', 'stopped', 'result','success','attempt_count')
+def _task_kind(func: str) -> str:
+    f = func.lower()
+    if 'scrape' in f or 'fetch_and' in f:    return 'scrape'
+    if 'mail' in f or 'email' in f:           return 'email'
+    if 'call' in f:                           return 'call'
+    if 'imap' in f or 'replies' in f:        return 'system'
+    return 'other'
 
-    return Response(
-        list(tasks)
-    )
+
+@api_view(['GET'])
+def list_tasks(request):
+    from django_q.models import Schedule
+
+    # Completed / failed / running tasks (all groups)
+    completed = []
+    for t in Task.objects.order_by('-stopped').values(
+        'id', 'name', 'func', 'started', 'stopped', 'result', 'success', 'attempt_count'
+    ):
+        if t['success'] is True:
+            task_status = 'success'
+        elif t['success'] is False:
+            task_status = 'failed'
+        else:
+            task_status = 'running'
+        completed.append({
+            **t,
+            'kind': _task_kind(t['func'] or ''),
+            'status': task_status,
+        })
+
+    # Pending scheduled tasks
+    scheduled = []
+    for s in Schedule.objects.order_by('next_run').values(
+        'id', 'name', 'func', 'next_run'
+    ):
+        scheduled.append({
+            'id': f"sched-{s['id']}",
+            'name': s['name'] or s['func'].split('.')[-1],
+            'func': s['func'],
+            'started': s['next_run'],
+            'stopped': None,
+            'result': None,
+            'success': None,
+            'attempt_count': 0,
+            'kind': _task_kind(s['func'] or ''),
+            'status': 'scheduled',
+        })
+
+    return Response(completed + scheduled)
 
 @api_view(['POST'])
 def send_email(request):
