@@ -44,7 +44,8 @@ def fetch_and_scrape_task(data):
     result = response.json()
 
     if not isinstance(result, list) and result.get('status_code') == 500:
-        raise Exception(result.get('Error Scraping'))
+        msg = result.get('detail') or result.get('Error Scraping') or result.get('error') or str(result)
+        raise Exception(msg)
 
     daily_limit = getattr(settings, 'EMAIL_DAILY_LIMIT', 400)
     delay_mins = getattr(settings, 'EMAIL_MIN_DELAY_MINS', 2)

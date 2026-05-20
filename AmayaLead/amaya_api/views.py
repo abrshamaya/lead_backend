@@ -315,7 +315,8 @@ def _readable_name(name: str | None, func: str) -> str:
 
 @api_view(['GET'])
 def list_tasks(request):
-    from django_q.models import Schedule
+    from django_q.models import Schedule, OrmQ
+    import pickle, zlib
 
     # Completed / failed / running tasks (all groups)
     completed = []
@@ -333,6 +334,28 @@ def list_tasks(request):
             'name': _readable_name(t['name'], t['func'] or ''),
             'kind': _task_kind(t['func'] or ''),
             'status': task_status,
+        })
+
+    # Queued tasks (waiting for a worker to pick them up)
+    queued = []
+    for q in OrmQ.objects.all().order_by('lock'):
+        try:
+            payload = pickle.loads(zlib.decompress(q.payload))
+            func = payload.get('func', '') if isinstance(payload, dict) else ''
+            name = payload.get('name', '') if isinstance(payload, dict) else ''
+        except Exception:
+            func, name = '', ''
+        queued.append({
+            'id': f"q-{q.id}",
+            'name': _readable_name(name, func),
+            'func': func,
+            'started': q.lock,
+            'stopped': None,
+            'result': None,
+            'success': None,
+            'attempt_count': 0,
+            'kind': _task_kind(func),
+            'status': 'running' if q.lock else 'scheduled',
         })
 
     # Pending scheduled tasks
@@ -353,7 +376,7 @@ def list_tasks(request):
             'status': 'scheduled',
         })
 
-    return Response(completed + scheduled)
+    return Response(completed + queued + scheduled)
 
 @api_view(['POST'])
 def send_email(request):
