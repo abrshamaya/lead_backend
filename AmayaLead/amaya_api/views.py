@@ -233,6 +233,47 @@ def leads_count(request):
                     })
 
 
+@api_view(['POST'])
+@parser_classes([JSONParser])
+def create_lead(request):
+    """Manually add a single lead."""
+    data = request.data
+    name = data.get('name', '').strip()
+    if not name:
+        return Response({'error': 'Business name is required'}, status=400)
+
+    import uuid
+    place_id = data.get('place_id', '').strip() or f"manual-{uuid.uuid4()}"
+
+    lead, created = Lead.objects.get_or_create(
+        place_id=place_id,
+        defaults={
+            'name': name,
+            'formatted_address': data.get('address', ''),
+            'national_phone_number': data.get('phone', ''),
+            'international_phone_number': data.get('international_phone', ''),
+            'website': data.get('website', '') or '',
+            'business_types': data.get('business_types', ''),
+            'description': data.get('description', ''),
+        },
+    )
+    if not created:
+        return Response({'error': 'Lead with this place_id already exists'}, status=409)
+
+    # Add emails
+    emails = data.get('emails', [])
+    if isinstance(emails, str):
+        emails = [e.strip() for e in emails.split(',') if e.strip()]
+    for email in emails:
+        Email.objects.create(business=lead, email=email.strip())
+
+    return Response({
+        'place_id': lead.place_id,
+        'name': lead.name,
+        'created': True,
+    }, status=201)
+
+
 @api_view(['DELETE'])
 def delete_lead(req, place_id):
     lead = get_object_or_404(Lead, place_id=place_id)
@@ -299,6 +340,9 @@ _FUNC_LABELS = {
     'schedule_outbound_call':    'Outbound Call',
 }
 
+# Internal background tasks hidden from the task list
+_HIDDEN_FUNCS = {'check_email_replies_task'}
+
 def _readable_name(name: str | None, func: str) -> str:
     """Return a human-readable task name.
 
@@ -320,13 +364,20 @@ def list_tasks(request):
     import pickle, zlib
 
     # Completed / failed / running tasks (all groups)
+    # Tasks with success=None and started >10 min ago are zombie — mark failed
+    zombie_cutoff = timezone.now() - timedelta(minutes=10)
     completed = []
     for t in Task.objects.order_by('-stopped').values(
         'id', 'name', 'func', 'started', 'stopped', 'result', 'success', 'attempt_count'
     ):
+        # Skip nameless/unidentifiable tasks
+        if not t['name'] and not t['func']:
+            continue
         if t['success'] is True:
             task_status = 'success'
         elif t['success'] is False:
+            task_status = 'failed'
+        elif t['started'] and t['started'] < zombie_cutoff:
             task_status = 'failed'
         else:
             task_status = 'running'
@@ -335,6 +386,8 @@ def list_tasks(request):
             'name': _readable_name(t['name'], t['func'] or ''),
             'kind': _task_kind(t['func'] or ''),
             'status': task_status,
+            'result': t['result'] if task_status != 'failed' or t['result'] else
+                      ('Task started but never completed (worker crashed)' if t['success'] is None else t['result']),
         })
 
     # Queued tasks (waiting for a worker to pick them up)
@@ -348,6 +401,10 @@ def list_tasks(request):
             name = payload.get('name', '') if isinstance(payload, dict) else ''
         except Exception:
             func, name = '', ''
+
+        # Skip nameless/unidentifiable entries
+        if not func and not name:
+            continue
 
         if q.lock and q.lock < stale_cutoff:
             # Worker locked this task but never finished — treat as failed
@@ -400,7 +457,9 @@ def list_tasks(request):
             'status': 'failed' if overdue else 'scheduled',
         })
 
-    return Response(completed + queued + scheduled)
+    all_tasks = [t for t in completed + queued + scheduled
+                 if not any(h in (t.get('func') or '') for h in _HIDDEN_FUNCS)]
+    return Response(all_tasks)
 
 
 @api_view(['POST'])

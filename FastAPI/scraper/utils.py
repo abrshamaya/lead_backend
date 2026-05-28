@@ -19,9 +19,11 @@ BAD_EXTENSIONS = (
 )
 
 # ── Email patterns ────────────────────────────────────────────────────────────
-EMAIL_PATTERN = r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
+# TLD must be 2-12 letters only (no digits) — filters out npm packages like
+# lodash@4.17.21, react@18.3.1, sentry hashes, etc.
+EMAIL_PATTERN = r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,12}"
 OBFUSCATED_EMAIL_PATTERN = (
-    r"([a-zA-Z0-9_.+-]+)\s*\[at\]\s*([a-zA-Z0-9-]+)\s*\[dot\]\s*([a-zA-Z.]+)"
+    r"([a-zA-Z0-9_.+-]+)\s*\[at\]\s*([a-zA-Z0-9-]+)\s*\[dot\]\s*([a-zA-Z]{2,12})"
 )
 
 # ── Junk email prefixes (not useful business contacts) ───────────────────────
@@ -33,6 +35,14 @@ JUNK_EMAIL_PREFIXES = {
     "unsubscribe", "subscribe",
     "wordpress", "drupal", "wix", "shopify",
     "example", "test", "demo",
+}
+
+# ── Junk email domains — platform/framework noise, not real contacts ─────────
+JUNK_EMAIL_DOMAINS = {
+    "sentry.io", "sentry.wixpress.com", "sentry-next.wixpress.com",
+    "wix.com", "wixpress.com", "shopify.com",
+    "example.com", "test.com", "localhost",
+    "users.noreply.github.com", "github.com",
 }
 
 # ── Realistic browser headers ─────────────────────────────────────────────────
@@ -51,11 +61,36 @@ REQUEST_HEADERS = {
 
 def is_junk_email(email: str) -> bool:
     """Return True for emails that are definitely not useful business contacts."""
-    local = email.split("@")[0].lower().strip()
-    return local in JUNK_EMAIL_PREFIXES or any(
+    import re
+    email = email.lower().strip()
+    if "@" not in email:
+        return True
+    local, domain = email.rsplit("@", 1)
+
+    # Junk prefix
+    if local in JUNK_EMAIL_PREFIXES or any(
         local.startswith(p + "+") or local.startswith(p + ".")
         for p in JUNK_EMAIL_PREFIXES
-    )
+    ):
+        return True
+
+    # Junk domain
+    if domain in JUNK_EMAIL_DOMAINS:
+        return True
+
+    # Version-like domain (e.g. lodash@4.17.21, react@18.3.1)
+    if re.match(r'^[\d.]+$', domain):
+        return True
+
+    # Hex hash local part (e.g. 8eb368c655b84e02@sentry.wixpress.com)
+    if re.match(r'^[0-9a-f]{16,}$', local):
+        return True
+
+    # Domain has no dot (not a real domain)
+    if '.' not in domain:
+        return True
+
+    return False
 
 
 def is_spa_site(url: str, timeout: int = 15, debug=False) -> bool:

@@ -110,20 +110,23 @@ def fetch_and_scrape_places(req: FetchRequest):
 
                 try:
                     out, err = proc.communicate(timeout=SCRAPER_TIMEOUT)
-                    result = json.loads(out)
 
-                    if result.get("status") == "ok":
-                        try:
-                            place['emails'] = result['emails']
-                        except Exception as e:
-                            print("Error during validation:", e)
-                            place['emails'] = result['emails']
+                    if out and out.strip():
+                        result = json.loads(out)
+                        if result.get("status") == "ok":
+                            place['emails'] = result.get('emails', [])
+                        else:
+                            with open(tmp_filename, 'r', encoding='utf-8') as f:
+                                emails = [line.strip() for line in f if line.strip()]
+                            place['emails'] = emails
+                            if not emails:
+                                place['scrape_error'] = "No Email Found"
                     else:
                         with open(tmp_filename, 'r', encoding='utf-8') as f:
                             emails = [line.strip() for line in f if line.strip()]
                         place['emails'] = emails
                         if not emails:
-                            place['scrape_error'] = result.get("error", "No Email Found")
+                            place['scrape_error'] = "No Email Found"
 
                 except subprocess.TimeoutExpired:
                     proc.kill()
@@ -131,15 +134,16 @@ def fetch_and_scrape_places(req: FetchRequest):
                         emails = [line.strip() for line in f if line.strip()]
                     place['emails'] = emails
                     if not emails:
-                        place['scrape_error'] = "Timeout Exceeded"
+                        place['scrape_error'] = "Unexpected Error"
 
                 except Exception as e:
                     proc.kill()
+                    logger.warning(f"Scrape error: {e}")
                     with open(tmp_filename, 'r', encoding='utf-8') as f:
                         emails = [line.strip() for line in f if line.strip()]
                     place['emails'] = emails
                     if not emails:
-                        place['scrape_error'] = str(e)
+                        place['scrape_error'] = "Unexpected Error"
 
             except Exception as e:
                 tb = traceback.extract_tb(sys.exc_info()[2])[-1]
@@ -158,16 +162,16 @@ def fetch_and_scrape_places(req: FetchRequest):
         if place.get('emails'):
             place['emails'] = [e for e in place['emails'] if not is_junk_email(e)]
 
-        # Filter remaining emails with AI
-        if place.get('emails'):
-            business_name = place.get('displayName', {}).get('text', '')
-            if business_name:
-                try:
-                    filtered_emails = filter_emails(business_name, place['emails'])
-                    place['emails'] = filtered_emails
-                except Exception as e:
-                    logger.warning(f"Email filtering failed for {business_name}: {e}")
-                    # Keep pre-filtered emails if AI filter fails
+        # AI email filtering disabled — rely on junk filter above
+        # To re-enable, uncomment the block below
+        # if place.get('emails'):
+        #     business_name = place.get('displayName', {}).get('text', '')
+        #     if business_name:
+        #         try:
+        #             filtered_emails = filter_emails(business_name, place['emails'])
+        #             place['emails'] = filtered_emails
+        #         except Exception as e:
+        #             logger.warning(f"Email filtering failed for {business_name}: {e}")
 
     return res
 

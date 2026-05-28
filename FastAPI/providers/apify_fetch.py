@@ -71,15 +71,9 @@ def fetch_places_by_query_via_apify(search_term: str, state: str = "",county:str
     search_strings = list(dict.fromkeys(search_strings))
     
     payload = {
-        "searchStringsArray":[search_term] ,
-        "locationQuery": f"{state}, USA",
-        "postalCode": zipcode,
-        "state": state,
-        "county": county,
+        "searchStringsArray": search_strings,
         "maxCrawledPlacesPerSearch": int(limit),
         "language": "en",
-        "includeRawResults": False,
-        "checkClosedPlaces": False,
     }
     
     logger.info(f"Starting Apify run with search strings: {search_strings}, limit: {limit}")
@@ -94,27 +88,35 @@ def fetch_places_by_query_via_apify(search_term: str, state: str = "",county:str
         run_id = run_data["data"]["id"]
         logger.info(f"Started Apify run with ID: {run_id}")
         
-        # 2) Poll status
+        # 2) Poll status — abort after 3 minutes
         status = "RUNNING"
-        max_polls = 300  # 10 minutes max (300 * 2 seconds)
+        max_polls = 90  # 3 minutes max (90 * 2 seconds)
         poll_count = 0
-        
+        status_data = None
+
         while status in ("RUNNING", "READY", "PAUSED", "RESTARTING") and poll_count < max_polls:
             time.sleep(2)
             poll_count += 1
-            
+
             status_url = f"https://api.apify.com/v2/actor-runs/{run_id}?token={APIFY_TOKEN}"
             status_response = requests.get(status_url, timeout=20)
             status_response.raise_for_status()
-            
+
             status_data = status_response.json()
             status = status_data["data"]["status"]
-            
-            if poll_count % 30 == 0:  # Log every minute
+
+            if poll_count % 15 == 0:  # Log every 30s
                 logger.info(f"Apify run {run_id} status: {status} (poll {poll_count})")
-        
+
         if status != "SUCCEEDED":
-            error_msg = f"Apify run failed with status: {status}"
+            # Abort the run if it's still going
+            if status in ("RUNNING", "READY"):
+                try:
+                    requests.post(f"https://api.apify.com/v2/actor-runs/{run_id}/abort?token={APIFY_TOKEN}", timeout=10)
+                    logger.info(f"Aborted stale Apify run {run_id}")
+                except Exception:
+                    pass
+            error_msg = f"Apify run timed out or failed (status: {status})"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
         
