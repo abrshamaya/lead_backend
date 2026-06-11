@@ -63,14 +63,75 @@ def make_outbound_call(lead: Lead, to_number: str):
 
 def schedule_outbound_call(place_id: str, to_number: str):
     """
-    Thin wrapper for Django Q scheduling.  Django Q serialises task args, and
-    passing a full Django model instance can be unreliable.  This function
-    accepts primitive types and does the DB lookup itself so it's safe to
-    schedule via django_q.tasks.schedule().
+    Django Q task entrypoint for outbound calls (immediate via async_task and
+    deferred via schedule()).  Accepts primitive types because Django Q
+    serialises task args.  Marks the lead, fires notifications, and re-raises
+    on failure so the task is recorded as failed in the task list.
     """
     from amaya_api.models import Lead
+    from amaya_api.core.notifications import notify_call_initiated, notify_call_failed
     lead = Lead.objects.get(place_id=place_id)
-    make_outbound_call(lead, to_number)
+    try:
+        result = make_outbound_call(lead, to_number)
+    except Exception:
+        try:
+            notify_call_failed(lead, "")
+        except Exception:
+            pass
+        raise
+    lead.call_sent = True
+    lead.save(update_fields=['call_sent'])
+    try:
+        notify_call_initiated(lead, result.conversation_id or "", to_number)
+    except Exception:
+        pass
+    return result.conversation_id or ""
+
+
+def sync_conversation_statuses(conversations) -> int:
+    """Pull fresh ElevenLabs status for non-terminal conversations and fire a
+    notification on the first transition into a terminal state (done/failed).
+    Transient API errors leave the row untouched for the next poll.
+    Returns the number of conversations updated."""
+    from amaya_api.models import CallConversations
+    from amaya_api.core.notifications import notify_call_completed, notify_call_failed
+    updated = 0
+    for conversation in conversations:
+        if conversation.status in (CallConversations.Status.DONE, CallConversations.Status.FAILED):
+            continue
+        try:
+            call_status = (
+                get_conversation_status(conversation.conversation_id)
+                if conversation.conversation_id else ''
+            )
+        except Exception as exc:
+            print(f"[call] status check failed for {conversation.conversation_id}: {exc}")
+            continue
+        if call_status and CallConversations.is_valid_status(call_status):
+            conversation.status = call_status
+        else:
+            conversation.status = CallConversations.Status.FAILED
+        conversation.save(update_fields=['status'])
+        updated += 1
+        try:
+            if conversation.status == CallConversations.Status.DONE:
+                notify_call_completed(conversation.lead, conversation.conversation_id)
+            elif conversation.status == CallConversations.Status.FAILED:
+                notify_call_failed(conversation.lead, conversation.conversation_id)
+        except Exception:
+            pass
+    return updated
+
+
+def check_call_statuses_task() -> int:
+    """Recurring background poller (see apps.py): keeps call conversation
+    statuses fresh and produces completed/failed notifications without anyone
+    having to open the lead's call history."""
+    from amaya_api.models import CallConversations
+    pending = CallConversations.objects.exclude(
+        status__in=[CallConversations.Status.DONE, CallConversations.Status.FAILED]
+    ).select_related('lead')
+    return sync_conversation_statuses(pending)
 
 
 def get_audio(conversation_id: str):

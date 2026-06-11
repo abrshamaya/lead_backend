@@ -16,9 +16,8 @@ from datetime import timedelta
 from django.utils import timezone
 from django_q.tasks import async_task,schedule
 from amaya_api.core.email.mail_helper import send_mail_to_lead,send_email
-from amaya_api.core.calls.call_helper import make_outbound_call,get_conversation_status,get_audio
+from amaya_api.core.calls.call_helper import get_audio, sync_conversation_statuses
 from .core.tasks.task import fetch_and_scrape_task
-from amaya_api.core.notifications import notify_call_initiated, notify_call_completed, notify_call_failed
 from rest_framework.response import Response
 from django.forms.models import model_to_dict
 from django.shortcuts import get_object_or_404
@@ -341,7 +340,7 @@ _FUNC_LABELS = {
 }
 
 # Internal background tasks hidden from the task list
-_HIDDEN_FUNCS = {'check_email_replies_task'}
+_HIDDEN_FUNCS = {'check_email_replies_task', 'check_call_statuses_task'}
 
 def _readable_name(name: str | None, func: str) -> str:
     """Return a human-readable task name.
@@ -646,26 +645,16 @@ def call_lead(request):
     calls_today = _get_calls_for_date(today)
 
     if calls_today < call_daily_limit:
-        # Capacity today — fire immediately
-        try:
-            result = make_outbound_call(lead, p_number)
-            lead.call_sent = True
-            lead.save()
-            try:
-                notify_call_initiated(lead, result.conversation_id or "", p_number)
-            except Exception:
-                pass
-            return Response({"detail": "Call Sent Successfully"}, status=status.HTTP_200_OK)
-        except Exception as e:
-            print(f"[call_lead] error: {str(e)}")
-            try:
-                notify_call_failed(lead, "")
-            except Exception:
-                pass
-            return Response(
-                {"error": f"Failed to initiate call: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        # Capacity today — queue the call as a tracked background task. The
+        # task marks call_sent and fires initiated/failed notifications.
+        async_task(
+            CALL_FUNC,
+            lead.place_id,
+            p_number,
+            task_name=f"Call → {lead.name} ({p_number})",
+            group="Call Group",
+        )
+        return Response({"detail": "Call queued"}, status=status.HTTP_202_ACCEPTED)
 
     # Today is full — find the next day with capacity (up to 7 days out)
     for day_offset in range(1, 8):
@@ -764,26 +753,8 @@ def get_lead_call_conversations(request):
     lead = get_object_or_404(Lead,place_id=place_id)
 
     conversations = lead.call_conversations.order_by('-created_at')
-    for conversation in conversations:
-        if conversation.status not in (CallConversations.Status.FAILED, CallConversations.Status.DONE):
-            prev_status = conversation.status
-            call_status = get_conversation_status(conversation.conversation_id)
-            if call_status and CallConversations.is_valid_status(call_status):
-                conversation.status = call_status
-            else:
-                conversation.status = CallConversations.Status.FAILED
-            conversation.save(update_fields=['status'])
-
-            # Fire a notification the first time we reach a terminal state
-            if prev_status not in (CallConversations.Status.DONE, CallConversations.Status.FAILED):
-                try:
-                    if conversation.status == CallConversations.Status.DONE:
-                        notify_call_completed(lead, conversation.conversation_id)
-                    elif conversation.status == CallConversations.Status.FAILED:
-                        notify_call_failed(lead, conversation.conversation_id)
-                except Exception:
-                    pass
-
+    # Refresh pending statuses on view; the recurring poller covers the rest.
+    sync_conversation_statuses(conversations)
 
     data = [model_to_dict(c) for c in conversations]
     return Response({
