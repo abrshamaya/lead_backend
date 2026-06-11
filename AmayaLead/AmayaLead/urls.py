@@ -25,6 +25,8 @@ urlpatterns = [
     path('api/auth/refresh', auth_views.refresh_token, name='auth-refresh'),
     path('api/auth/me', auth_views.me, name='auth-me'),
     path('api/auth/change-password', auth_views.change_password, name='auth-change-password'),
+    path('api/auth/forgot-password', auth_views.forgot_password, name='auth-forgot-password'),
+    path('api/auth/reset-password', auth_views.reset_password, name='auth-reset-password'),
     path('api/auth/users', auth_views.users, name='auth-users'),
     path('api/auth/users/<int:user_id>', auth_views.user_detail, name='auth-user-detail'),
 ]

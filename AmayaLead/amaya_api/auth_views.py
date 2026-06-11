@@ -1,4 +1,9 @@
 from django.contrib.auth.models import User
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.conf import settings
+from django_q.tasks import async_task
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
@@ -73,6 +78,9 @@ def change_password(request):
     if not user.check_password(old):
         return Response({"error": "Current password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
 
+    if len(new) < 8:
+        return Response({"error": "New password must be at least 8 characters"}, status=status.HTTP_400_BAD_REQUEST)
+
     user.set_password(new)
     user.save()
 
@@ -82,6 +90,70 @@ def change_password(request):
         "access": str(refresh.access_token),
         "refresh": str(refresh),
     })
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def forgot_password(request):
+    """Email a one-time password-reset link. Always answers with the same
+    generic message so the endpoint can't be used to probe which emails have
+    accounts."""
+    email = request.data.get("email", "").strip().lower()
+    generic = {"detail": "If an account with that email exists, a reset link has been sent."}
+    if not email:
+        return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(email__iexact=email, is_active=True)
+    except User.DoesNotExist:
+        return Response(generic)
+
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    frontend = getattr(settings, "FRONTEND_URL", "https://remedylead.app").rstrip("/")
+    link = f"{frontend}/reset-password?uid={uid}&token={token}"
+
+    # Send in the background so response timing doesn't leak account existence
+    async_task(
+        'django.core.mail.send_mail',
+        "Reset your RemedyLead password",
+        (
+            f"Hi {user.first_name or user.username},\n\n"
+            f"Someone requested a password reset for your RemedyLead account.\n"
+            f"Click the link below to choose a new password:\n\n{link}\n\n"
+            f"If you didn't request this, you can safely ignore this email."
+        ),
+        None,  # DEFAULT_FROM_EMAIL
+        [email],
+        task_name=f"Password reset → {email}",
+    )
+    return Response(generic)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def reset_password(request):
+    """Set a new password from a forgot-password link (uid + token)."""
+    uid = request.data.get("uid", "")
+    token = request.data.get("token", "")
+    new = request.data.get("new_password", "")
+
+    if not uid or not token or not new:
+        return Response({"error": "uid, token and new_password are required"}, status=status.HTTP_400_BAD_REQUEST)
+    if len(new) < 8:
+        return Response({"error": "Password must be at least 8 characters"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(pk=force_str(urlsafe_base64_decode(uid)), is_active=True)
+    except Exception:
+        return Response({"error": "Invalid reset link"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not default_token_generator.check_token(user, token):
+        return Response({"error": "This reset link is invalid or has expired"}, status=status.HTTP_400_BAD_REQUEST)
+
+    user.set_password(new)
+    user.save()
+    return Response({"detail": "Password updated — you can now sign in."})
 
 
 # ── User management (admin only) ──────────────────────────────────────────────

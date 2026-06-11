@@ -173,6 +173,9 @@ EMAIL_IMAP_HOST = os.getenv('EMAIL_IMAP_HOST', 'imap.gmail.com')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 
+# Public URL of the frontend — used in password-reset emails
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://remedylead.app')
+
 # Rate limiting — tune via env vars without redeploying
 # Gmail free: 500/day. Google Workspace: 2000/day. Stay conservative.
 EMAIL_DAILY_LIMIT = int(os.getenv('EMAIL_DAILY_LIMIT', 400))
