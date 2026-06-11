@@ -744,6 +744,24 @@ def get_called_leads(request):
                         'leads':data
                     })
 
+
+@api_view(['GET'])
+def list_call_conversations(request):
+    """All call conversations across all leads, newest first, with lead info.
+    Status freshness is maintained by the recurring check_call_statuses_task."""
+    conversations = CallConversations.objects.select_related('lead').order_by('-id')
+    data = [{
+        'id': c.id,
+        'conversation_id': c.conversation_id,
+        'status': c.status,
+        'success': c.success,
+        'created_at': c.created_at,
+        'place_id': c.lead.place_id,
+        'lead_name': c.lead.name,
+        'phone': c.lead.international_phone_number or c.lead.national_phone_number or '',
+    } for c in conversations]
+    return Response({'conversations': data})
+
 @api_view(['GET'])
 def get_lead_call_conversations(request):
     """
