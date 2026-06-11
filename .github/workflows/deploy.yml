@@ -30,6 +30,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          port: 1212
           source: "django.env,scraper.env"
           target: ${{ secrets.VPS_BACKEND_PATH }}/_env_staging
 
@@ -40,6 +41,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          port: 1212
           script: |
             set -e
             cd ${{ secrets.VPS_BACKEND_PATH }}
