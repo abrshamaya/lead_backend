@@ -25,11 +25,16 @@ load_dotenv()
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
+IS_PROD = os.getenv('DJANGO_ENV') == 'prod'
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-p7t__)fmn@3u&q0$s9rmv)+8o9#kl2i+h0!_c#pckb&3w1oa2a'
+SECRET_KEY = os.getenv(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-p7t__)fmn@3u&q0$s9rmv)+8o9#kl2i+h0!_c#pckb&3w1oa2a',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = not IS_PROD
 
 ALLOWED_HOSTS = [
     'remedylead.app',
@@ -37,6 +42,11 @@ ALLOWED_HOSTS = [
     '135.181.99.162',
     'localhost',
     '127.0.0.1'
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://remedylead.app',
+    'https://www.remedylead.app',
 ]
 
 
@@ -74,6 +84,7 @@ SIMPLE_JWT = {
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -114,25 +125,26 @@ CORS_ALLOWED_ORIGINS = [
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Prod (docker-compose) uses Postgres so backend + qcluster share one DB;
+# local dev stays on sqlite.
+if IS_PROD:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("POSTGRES_DB", "lead_db"),
+            "USER": os.getenv("POSTGRES_USER", "lead_user"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "lead_pass"),
+            "HOST": os.getenv("POSTGRES_HOST", "db"),
+            "PORT": os.getenv("POSTGRES_PORT", "5432"),
+        }
     }
-}
-
-
-
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.postgresql",
-#         "NAME": os.getenv("POSTGRES_DB", "lead_db"),
-#         "USER": os.getenv("POSTGRES_USER", "lead_user"),
-#         "PASSWORD": os.getenv("POSTGRES_PASSWORD", "lead_pass"),
-#         "HOST": os.getenv("POSTGRES_HOST", "db"),
-#         "PORT": os.getenv("POSTGRES_PORT", "5432"),
-#     }
-# }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -186,6 +198,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

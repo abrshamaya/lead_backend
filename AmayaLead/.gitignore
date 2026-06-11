@@ -8,3 +8,4 @@ scraper/__pycache__
 
 *.env
 test*
+staticfiles/

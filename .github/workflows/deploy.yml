@@ -1,0 +1,54 @@
+name: Deploy backend to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Materialise the two .env files from secrets (newlines preserved).
+      - name: Write env files
+        run: |
+          cat <<'DJANGO_ENV_EOF' > django.env
+          ${{ secrets.BACKEND_DJANGO_ENV }}
+          DJANGO_ENV_EOF
+          cat <<'SCRAPER_ENV_EOF' > scraper.env
+          ${{ secrets.BACKEND_SCRAPER_ENV }}
+          SCRAPER_ENV_EOF
+
+      # 2. Ship them to the server (they are gitignored, so they live only here).
+      - name: Copy env files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "django.env,scraper.env"
+          target: ${{ secrets.VPS_BACKEND_PATH }}/_env_staging
+
+      # 3. Sync code to main, move env files into place, build & restart via Docker.
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.VPS_BACKEND_PATH }}
+            git fetch origin main
+            git reset --hard origin/main
+            mv _env_staging/django.env AmayaLead/.env
+            mv _env_staging/scraper.env FastAPI/.env
+            rmdir _env_staging 2>/dev/null || true
+            docker compose build
+            docker compose up -d
+            docker image prune -f
+            docker compose ps
