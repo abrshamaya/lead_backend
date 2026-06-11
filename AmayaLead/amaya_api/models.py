@@ -11,7 +11,7 @@ class Lead(models.Model):
     weekly_opening_hours = models.TextField(blank=True, null=True, default='')
     national_phone_number = models.CharField(max_length=128, null=True,blank=True, default='')
     international_phone_number = models.CharField(max_length=128,null=True,blank=True, default='')
-    scrape_error = models.CharField(max_length=512,blank=True , default = None)
+    scrape_error = models.CharField(max_length=512,blank=True , default = '')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_now = models.DateTimeField(auto_now=True)
     email_sent = models.BooleanField(default=False)

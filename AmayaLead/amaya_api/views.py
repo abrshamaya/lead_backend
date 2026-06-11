@@ -361,7 +361,6 @@ def _readable_name(name: str | None, func: str) -> str:
 @api_view(['GET'])
 def list_tasks(request):
     from django_q.models import Schedule, OrmQ
-    import pickle, zlib
 
     # Completed / failed / running tasks (all groups)
     # Tasks with success=None and started >10 min ago are zombie — mark failed
@@ -396,8 +395,11 @@ def list_tasks(request):
     queued = []
     for q in OrmQ.objects.all().order_by('lock'):
         try:
-            payload = pickle.loads(zlib.decompress(q.payload))
+            # OrmQ payloads are SignedPackage strings, not raw pickle/zlib
+            payload = q.task
             func = payload.get('func', '') if isinstance(payload, dict) else ''
+            if callable(func):
+                func = f"{func.__module__}.{func.__name__}"
             name = payload.get('name', '') if isinstance(payload, dict) else ''
         except Exception:
             func, name = '', ''
