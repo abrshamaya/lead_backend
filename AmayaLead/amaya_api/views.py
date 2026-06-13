@@ -9,7 +9,7 @@ from django_q.models import Task
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.conf import settings
-from .models import Lead, Email, CallConversations, Notification
+from .models import Lead, Email, CallConversations, Notification, EmailTemplate
 from .core.places.places_api import fetch_places_by_query
 from amaya_api.core.email.mail_helper import send_mail_to_lead,get_conversation
 from datetime import timedelta
