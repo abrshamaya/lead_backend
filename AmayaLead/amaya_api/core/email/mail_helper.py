@@ -14,7 +14,7 @@ from email.utils import parsedate_to_datetime, parseaddr
 
 
 def brand_context() -> dict:
-    """Shared branding for all outbound emails — self-hosted logo + agency
+    """Shared branding for all outbound emails - self-hosted logo + agency
     contact details. Colours live in the templates (#174275 navy / #4b8b61 green)."""
     base = getattr(settings, "FRONTEND_URL", "https://remedylead.app").rstrip("/")
     return {
@@ -36,7 +36,7 @@ def send_mail_to_lead(lead_email, business_name):
     subject = f"Insurance coverage for {business_name}"
 
     if not getattr(settings, 'EMAIL_SENDING', True):
-        print(f"EMAIL_SENDING disabled — skipping email to {lead_email} ({business_name})")
+        print(f"EMAIL_SENDING disabled - skipping email to {lead_email} ({business_name})")
         return
 
     if not lead_email:
@@ -291,7 +291,7 @@ def send_email(lead_email, bussiness_name, message, subject="", attachments=None
     {filename, content_type, data} dicts where `data` is base64-encoded bytes
     (e.g. an image edited in the chat composer)."""
     if not getattr(settings, 'EMAIL_SENDING', True):
-        print(f"EMAIL_SENDING disabled — skipping email to {lead_email} ({bussiness_name})")
+        print(f"EMAIL_SENDING disabled - skipping email to {lead_email} ({bussiness_name})")
         return
 
     if not lead_email:
