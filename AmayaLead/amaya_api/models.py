@@ -75,6 +75,31 @@ class CallConversations(models.Model):
         return status in cls.Status.values
 
 
+class EmailTemplate(models.Model):
+    """Reusable email templates for different outreach scenarios (cold reach,
+    follow-up, etc.). Bodies/subjects may contain {business_name} placeholders
+    that are filled in when the template is used."""
+    class Category(models.TextChoices):
+        COLD_REACH   = 'cold_reach',   'Cold Reach'
+        FOLLOW_UP    = 'follow_up',    'Follow-up'
+        RE_ENGAGE    = 're_engage',    'Re-engagement'
+        THANK_YOU    = 'thank_you',    'Thank You'
+        GENERAL      = 'general',      'General'
+
+    name       = models.CharField(max_length=255)
+    category   = models.CharField(max_length=64, choices=Category.choices, default=Category.GENERAL)
+    subject    = models.CharField(max_length=512, blank=True, default='')
+    body       = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['category', 'name']
+
+    def __str__(self):
+        return f"{self.name} ({self.category})"
+
+
 class Notification(models.Model):
     class Type(models.TextChoices):
         EMAIL_REPLY     = 'email_reply',     'Email Reply'

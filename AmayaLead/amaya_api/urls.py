@@ -28,4 +28,6 @@ urlpatterns = [
     path("notifications/mark_all_read", views.mark_all_notifications_read, name="mark all notifications read"),
     path("tasks/purge_stale", views.purge_stale_schedules, name="purge stale schedules"),
     path("email_conversation", views.delete_email_conversation, name="delete email conversation"),
+    path("templates", views.templates, name="email templates"),
+    path("templates/<int:template_id>", views.template_detail, name="email template detail"),
 ]

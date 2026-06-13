@@ -235,7 +235,7 @@ def get_conversation(other_email:str)->List[Message]:
 
 
 
-def send_email(lead_email, bussiness_name, message):
+def send_email(lead_email, bussiness_name, message, subject=""):
     if not lead_email:
         raise Exception("No Email Given")
 
@@ -246,7 +246,8 @@ def send_email(lead_email, bussiness_name, message):
     print(f"From: {settings.DEFAULT_FROM_EMAIL}")
     print(f"To: {lead_email}")
 
-    subject = f"Re: Insurance coverage for {bussiness_name}" if bussiness_name else "Re: Insurance coverage"
+    if not subject:
+        subject = f"Re: Insurance coverage for {bussiness_name}" if bussiness_name else "Re: Insurance coverage"
 
     try:
         send_mail(

@@ -497,6 +497,7 @@ def send_email(request):
     email_rece = request.data.get("to_email","")
     place_id = request.data.get("place_id", "")
     message = request.data.get("message","")
+    subject = request.data.get("subject", "") or ""
     lead = get_object_or_404(Lead,place_id=place_id)
     lead_emails = [lead['email'] for lead in lead.emails.all().values('email')]
     print("LEAD EMAILS",lead_emails,email_rece)
@@ -507,10 +508,12 @@ def send_email(request):
     try:
 
         from amaya_api.core.email.mail_helper import send_email as send_actual_email
-        send_actual_email(email_rece,lead.name,message)
-        # schedule("amaya_api.core.email.mail_helper.send_email",
-        #          email,lead.name,message,
-        #           schedule_type='O',next_run=timezone.now()+timedelta(seconds=5),repeats=1)
+        send_actual_email(email_rece,lead.name,message,subject=subject)
+        # Marking the lead as emailed makes a manually-started conversation
+        # show up in the email chat sidebar (which lists email_sent leads).
+        if not lead.email_sent:
+            lead.email_sent = True
+            lead.save(update_fields=['email_sent'])
         return Response(
             {"detail": "Email Sent Sucessfully"},
             status=status.HTTP_200_OK
@@ -521,6 +524,69 @@ def send_email(request):
             {"error": f"Failed to send email. Error: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+# ── Email templates ───────────────────────────────────────────────────────────
+
+def _template_dict(t):
+    return {
+        'id': t.id,
+        'name': t.name,
+        'category': t.category,
+        'subject': t.subject,
+        'body': t.body,
+        'created_at': t.created_at,
+        'updated_at': t.updated_at,
+    }
+
+
+@api_view(['GET', 'POST'])
+@parser_classes([JSONParser])
+def templates(request):
+    if request.method == 'GET':
+        qs = EmailTemplate.objects.all()
+        return Response([_template_dict(t) for t in qs])
+
+    name = (request.data.get('name') or '').strip()
+    body = (request.data.get('body') or '').strip()
+    if not name or not body:
+        return Response({'error': 'Name and body are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    category = request.data.get('category', EmailTemplate.Category.GENERAL)
+    if category not in EmailTemplate.Category.values:
+        category = EmailTemplate.Category.GENERAL
+
+    t = EmailTemplate.objects.create(
+        name=name,
+        category=category,
+        subject=request.data.get('subject', '') or '',
+        body=body,
+    )
+    return Response(_template_dict(t), status=status.HTTP_201_CREATED)
+
+
+@api_view(['PATCH', 'DELETE'])
+@parser_classes([JSONParser])
+def template_detail(request, template_id):
+    t = get_object_or_404(EmailTemplate, id=template_id)
+
+    if request.method == 'DELETE':
+        t.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    if 'name' in request.data:
+        name = (request.data['name'] or '').strip()
+        if not name:
+            return Response({'error': 'Name cannot be empty'}, status=status.HTTP_400_BAD_REQUEST)
+        t.name = name
+    if 'body' in request.data:
+        t.body = request.data['body'] or ''
+    if 'subject' in request.data:
+        t.subject = request.data['subject'] or ''
+    if 'category' in request.data and request.data['category'] in EmailTemplate.Category.values:
+        t.category = request.data['category']
+    t.save()
+    return Response(_template_dict(t))
 @api_view(['POST'])
 @parser_classes([JSONParser])
 def send_email_to_lead(request):
