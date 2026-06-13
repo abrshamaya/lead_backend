@@ -1,0 +1,7 @@
+{{ message }}
+
+--
+{{ company_name }}
+{{ company_address }}
+Phone: {{ phone }}
+Email: {{ email }}

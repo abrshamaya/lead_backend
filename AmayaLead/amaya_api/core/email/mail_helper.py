@@ -1,13 +1,30 @@
-from django.core.mail import send_mail, EmailMessage
+from django.core.mail import send_mail, EmailMultiAlternatives
 from django.template.loader import render_to_string
+from django.utils.html import escape
 from django.conf import settings
 import imaplib
 import email
 import base64
+import uuid
+from email.mime.image import MIMEImage
 from datetime import timezone,datetime
 from typing import TypedDict, List
 import re
 from email.utils import parsedate_to_datetime, parseaddr
+
+
+def brand_context() -> dict:
+    """Shared branding for all outbound emails — self-hosted logo + agency
+    contact details. Colours live in the templates (#174275 navy / #4b8b61 green)."""
+    base = getattr(settings, "FRONTEND_URL", "https://remedylead.app").rstrip("/")
+    return {
+        "company_name": "Mahfuz Insurance Agency",
+        "company_address": "6000 Stevenson Ave suite 303, Alexandria VA 22304",
+        "phone": "703-212-9131",
+        "email": "mummedm@mahfuzinsagency.com",
+        "logo_url": f"{base}/static/email/mahfuz-logo.png",
+        "unsubscribe_url": "https://www.mahfuzinsagency.com/unsubscribe/",
+    }
 
 # Images smaller than this are almost always tracking pixels / spacer gifs and
 # are skipped when extracting attachments for display.
@@ -33,17 +50,12 @@ def send_mail_to_lead(lead_email, business_name):
     print(f"From: {settings.DEFAULT_FROM_EMAIL}")
     print(f"To: {lead_email}")
     context = {
+        **brand_context(),
         "subject": f"Business insurance options for {business_name}",
         "recipient_business_name": f"{business_name}",
-        "company_name": "Mahfuz Insurance Agency",
-        "company_address": "6000 Stevenson Ave suite 303 Alexandria VA 22304",
         "license_number": "LIC-1234567",
-        "phone": "703-212-9131",
-        "email":"mummedm@mahfuzinsagency.com",
         "product_name": "Business Liability and Property Coverage",
-        "logo_url": "https://www.mahfuzinsagency.com/img/mahfuz-insurance.png",
         "cta_url": "https://shortifyme.co/4QQYO",
-        "unsubscribe_url": "https://www.mahfuzinsagency.com/unsubscribe/",
     }
     plain_msg = render_to_string("email_template.txt", context)
     html_msg = render_to_string("email_template.html", context)
@@ -295,21 +307,43 @@ def send_email(lead_email, bussiness_name, message, subject="", attachments=None
         subject = f"Re: Insurance coverage for {bussiness_name}" if bussiness_name else "Re: Insurance coverage"
 
     try:
-        email_msg = EmailMessage(
-            subject=subject,
-            body=message or "",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[lead_email],
-        )
+        ctx = brand_context()
+        ctx["subject"] = subject
+
+        # Attach images inline (cid:) so they render in the HTML body, not just
+        # as downloads. Gmail strips data: URIs, so we use Content-ID references.
+        inline_imgs = []   # (cid, raw_bytes, subtype, filename)
+        cid_srcs = []
         for att in attachments:
             raw = att.get("data", "")
             if not raw:
                 continue
-            email_msg.attach(
-                att.get("filename") or "attachment",
-                base64.b64decode(raw),
-                att.get("content_type") or "application/octet-stream",
-            )
+            subtype = (att.get("content_type") or "image/jpeg").split("/")[-1]
+            cid = uuid.uuid4().hex
+            inline_imgs.append((cid, base64.b64decode(raw), subtype, att.get("filename") or f"image.{subtype}"))
+            cid_srcs.append(f"cid:{cid}")
+
+        text_body = render_to_string("reply_template.txt", {**ctx, "message": message or ""})
+        html_body = render_to_string("reply_template.html", {
+            **ctx,
+            "message_html": escape(message or "").replace("\n", "<br>"),
+            "images": cid_srcs,
+        })
+
+        email_msg = EmailMultiAlternatives(
+            subject=subject,
+            body=text_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[lead_email],
+        )
+        email_msg.attach_alternative(html_body, "text/html")
+        if inline_imgs:
+            email_msg.mixed_subtype = "related"   # bind inline images to the HTML
+            for cid, raw_bytes, subtype, filename in inline_imgs:
+                img = MIMEImage(raw_bytes, _subtype=subtype)
+                img.add_header("Content-ID", f"<{cid}>")
+                img.add_header("Content-Disposition", "inline", filename=filename)
+                email_msg.attach(img)
         email_msg.send(fail_silently=False)
     except Exception as e:
         raise Exception("Failed to send email", str(e))
