@@ -1,5 +1,73 @@
 # Deployment — remedylead.app
 
+## ✅ What YOU need to do (checklist)
+
+Do these once. After that, every `git push` to `main` auto-deploys.
+
+> **Note:** SSH on the VPS listens on port **1212**, not 22 (`ssh -p 1212 user@135.181.99.162`).
+> The CI workflows already pass `port: 1212`.
+
+**A. On the VPS (135.181.99.162), one time:**
+1. [X] Clone both repos somewhere, e.g. `/srv`:
+   ```bash
+   cd /srv
+   git clone https://github.com/abrshamaya/lead_backend.git
+   git clone https://github.com/abrshamaya/amaya_lead.git
+   ```
+   (Use a token or deploy key — both repos are private. The clone must be able to
+   `git fetch` non-interactively, or CI's `git reset --hard` step will fail.)
+2. [ ] Make sure the SSH user can run Docker without sudo:
+   `sudo usermod -aG docker $USER` then log out/in.
+3. [ ] Create the static dir for the backend (uid 5678 = the container user):
+   `mkdir -p /srv/lead_backend/AmayaLead/staticfiles && sudo chown 5678 /srv/lead_backend/AmayaLead/staticfiles`
+4. [ ] Add the host-nginx vhost for `remedylead.app` + TLS (config in
+   [One-time server setup](#one-time-server-setup) below).
+5. [ ] Point DNS: `remedylead.app` and `www` A records → `135.181.99.162`.
+
+**B. Generate a deploy SSH key (on your machine):**
+6. [ ] `ssh-keygen -t ed25519 -f deploy_key -N ""`
+7. [ ] Append the **public** key to the VPS: add `deploy_key.pub` contents to
+   `~/.ssh/authorized_keys` for `VPS_USER` on the server.
+8. [ ] Keep the **private** `deploy_key` file — it goes into `VPS_SSH_KEY` below.
+
+**C. Add GitHub repository secrets** (Settings → Secrets and variables → Actions):
+
+In **`lead_backend`**:
+| Secret | Value |
+|--------|-------|
+| `VPS_HOST` | `135.181.99.162` |
+| `VPS_USER` | your SSH username (e.g. `root`) |
+| `VPS_SSH_KEY` | the **private** `deploy_key` (whole file) |
+| `VPS_BACKEND_PATH` | `/srv/lead_backend` (wherever you cloned it) |
+| `BACKEND_DJANGO_ENV` | paste the **entire** `AmayaLead/.env` file |
+| `BACKEND_SCRAPER_ENV` | paste the **entire** `FastAPI/.env` file |
+
+In **`amaya_lead`**:
+| Secret | Value |
+|--------|-------|
+| `VPS_HOST` | `135.181.99.162` |
+| `VPS_USER` | same SSH username |
+| `VPS_SSH_KEY` | same private `deploy_key` |
+| `VPS_FRONTEND_PATH` | `/srv/amaya_lead` (wherever you cloned it) |
+| `FRONTEND_ENV` | paste the **entire** frontend `.env` (the `VITE_*` vars) |
+
+> Optional: add a `DJANGO_SECRET_KEY=<random string>` line inside `BACKEND_DJANGO_ENV`.
+> Without it, Django falls back to the insecure dev key.
+
+**D. Deploy:**
+9. [ ] `git push` each repo (or **Actions → Deploy → Run workflow**). The push
+   triggers the pipeline, which builds and starts the containers.
+10. [ ] First deploy only — set up the database (Postgres starts empty):
+   ```bash
+   # on the VPS, in /srv/lead_backend:
+   docker compose exec backend python manage.py createsuperuser
+   # optional: import existing local sqlite data — see One-time server setup step 6
+   ```
+
+That's it. Everything below is reference detail.
+
+---
+
 Two repos, both deployed on the VPS (135.181.99.162) with docker compose:
 
 | Repo | Stack | Ports (host) |
@@ -21,41 +89,23 @@ A host-level nginx terminates HTTPS for `remedylead.app` and routes:
    - `<backend>/FastAPI/.env` — Apify token, OpenRouter key, Google Places key
    - `<frontend>/.env` — `VITE_*` vars (baked into the bundle at **build** time; changing them requires a rebuild, not just a restart)
 3. Optionally add `DJANGO_SECRET_KEY=<random string>` to the `BACKEND_DJANGO_ENV` secret (falls back to the dev key otherwise).
-4. Host nginx site (`/etc/nginx/sites-available/remedylead.app`):
+4. Host nginx site — the full vhost is committed at
+   [`deploy/nginx/remedylead.app.conf`](deploy/nginx/remedylead.app.conf). Install it:
 
-   ```nginx
-   server {
-       server_name remedylead.app www.remedylead.app;
-
-       location /api/ {
-           proxy_pass http://127.0.0.1:8000/api/;
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-           proxy_read_timeout 300s;
-       }
-
-       location /admin/ {
-           proxy_pass http://127.0.0.1:8000/admin/;
-           proxy_set_header Host $host;
-           proxy_set_header X-Forwarded-Proto $scheme;
-       }
-
-       location /static/ {
-           proxy_pass http://127.0.0.1:8000/static/;
-       }
-
-       location / {
-           proxy_pass http://127.0.0.1:8080;
-           proxy_set_header Host $host;
-       }
-
-       listen 443 ssl;  # certbot manages the cert blocks
-   }
+   ```bash
+   sudo cp deploy/nginx/remedylead.app.conf /etc/nginx/sites-available/remedylead.app
+   sudo ln -s /etc/nginx/sites-available/remedylead.app /etc/nginx/sites-enabled/
    ```
 
-   Then `nginx -t && systemctl reload nginx`. Use `certbot --nginx -d remedylead.app -d www.remedylead.app` for TLS.
+   Issue the TLS cert (cert files don't exist on a fresh box yet):
+
+   ```bash
+   sudo certbot --nginx -d remedylead.app -d www.remedylead.app
+   ```
+
+   Then `sudo nginx -t && sudo systemctl reload nginx`. The committed file is plain HTTP
+   that proxies `/api/`, `/admin/`, `/static/` to Django (`:8000`) and everything else to
+   the frontend (`:8080`); `certbot --nginx` adds the 443/TLS blocks and HTTP→HTTPS redirect.
 
 5. Create the static files dir writable by the container user (uid 5678):
    ```
@@ -120,5 +170,5 @@ You can also trigger a deploy manually from the Actions tab (`workflow_dispatch`
 ## Env var notes
 
 - Backend/scraper `.env` changes take effect with `docker compose up -d` (compose injects them via `env_file` — no rebuild needed).
-- Frontend `.env` changes **require a rebuild** (`bash deploy.sh`), because Vite inlines `VITE_*` values into the JS bundle.
+- Frontend `.env` changes **require a rebuild** (`docker compose build`), because Vite inlines `VITE_*` values into the JS bundle — a plain restart won't pick them up.
 - `DJANGO_ENV=prod` (set in docker-compose) switches Django to Postgres, `DEBUG=False`, and the `http://scraper:8001` service URL. Local dev without that var keeps sqlite + DEBUG.
