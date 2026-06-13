@@ -17,6 +17,7 @@ urlpatterns = [
     path("emailed_leads",views.get_emailed_leads,name="Get all emailed leads"),
     path("called_leads",views.get_called_leads, name="Called Leads"),
     path("call_conversations", views.list_call_conversations, name="List call conversations"),
+    path("call_conversations/<int:conv_id>", views.delete_call_conversation, name="Delete call conversation"),
     path("lead_call_conversations",views.get_lead_call_conversations, name="Called Leads"),
     path("lead_call_conversation_audio",views.get_lead_call_conversation_audio, name="Called Leads"),
     path("email_history", views.get_email_history, name="get conversation history"),

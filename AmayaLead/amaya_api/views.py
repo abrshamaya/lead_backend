@@ -828,6 +828,14 @@ def list_call_conversations(request):
     } for c in conversations]
     return Response({'conversations': data})
 
+
+@api_view(['DELETE'])
+def delete_call_conversation(request, conv_id):
+    """Remove a single call conversation record from the call log."""
+    conv = get_object_or_404(CallConversations, id=conv_id)
+    conv.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
 @api_view(['GET'])
 def get_lead_call_conversations(request):
     """
