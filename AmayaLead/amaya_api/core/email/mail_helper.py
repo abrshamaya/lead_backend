@@ -1,12 +1,17 @@
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMessage
 from django.template.loader import render_to_string
 from django.conf import settings
 import imaplib
 import email
+import base64
 from datetime import timezone,datetime
 from typing import TypedDict, List
 import re
 from email.utils import parsedate_to_datetime, parseaddr
+
+# Images smaller than this are almost always tracking pixels / spacer gifs and
+# are skipped when extracting attachments for display.
+MIN_IMAGE_BYTES = 2048
 
 def send_mail_to_lead(lead_email, business_name):
     subject = f"Insurance coverage for {business_name}"
@@ -81,12 +86,38 @@ GMAIL_THREAD_PATTERN_ALT = re.compile(
 QUOTED_LINE_PATTERN = re.compile(r'^>.*$', re.MULTILINE)
 
 
+class ImageAttachment(TypedDict):
+    filename: str
+    data_uri: str  # "data:image/png;base64,…"
+
+
 class Message(TypedDict):
     msg: str
     date: str  # ISO format string (e.g., "2024-01-15T10:30:00+00:00")
     sender_name: str
     sender_email: str
     receiver_email: str
+    images: List[ImageAttachment]
+
+
+def get_message_images(msg) -> List[ImageAttachment]:
+    """Extract image attachments / inline images from an email message and
+    return them as base64 data URIs so the frontend can render them inline."""
+    images: List[ImageAttachment] = []
+    if not msg.is_multipart():
+        return images
+    for part in msg.walk():
+        ctype = part.get_content_type()
+        if not ctype.startswith("image/"):
+            continue
+        payload = part.get_payload(decode=True)
+        if not payload or len(payload) < MIN_IMAGE_BYTES:
+            continue
+        b64 = base64.b64encode(payload).decode("ascii")
+        ext = ctype.split("/")[-1]
+        filename = part.get_filename() or f"image.{ext}"
+        images.append({"filename": filename, "data_uri": f"data:{ctype};base64,{b64}"})
+    return images
 
 
 def safe_date(msg_date: str) -> str:
@@ -210,8 +241,9 @@ def get_conversation(other_email:str)->List[Message]:
         sender_name, sender_email = parseaddr(msg["From"])
 
         plain_msg = get_plain_text(msg)
-        if plain_msg:
-            conv.append({"msg": plain_msg,"date": safe_date(msg["Date"]),"sender_name":sender_name, "sender_email":sender_email,"receiver_email":other_email})
+        images = get_message_images(msg)
+        if plain_msg or images:
+            conv.append({"msg": plain_msg,"date": safe_date(msg["Date"]),"sender_name":sender_name, "sender_email":sender_email,"receiver_email":other_email,"images":images})
 
     
     # Logging everything recieved
@@ -224,9 +256,10 @@ def get_conversation(other_email:str)->List[Message]:
         byytes = msg_data[0][1]
         msg = email.message_from_bytes(byytes)
         plain_msg = get_plain_text(msg)
+        images = get_message_images(msg)
         sender_name, sender_email = parseaddr(msg["From"])
-        if plain_msg:
-            conv.append({"msg": plain_msg,"date": safe_date(msg["Date"]),"sender_name":sender_name, "sender_email":sender_email,"receiver_email":self_email})
+        if plain_msg or images:
+            conv.append({"msg": plain_msg,"date": safe_date(msg["Date"]),"sender_name":sender_name, "sender_email":sender_email,"receiver_email":self_email,"images":images})
 
     # Sorting based on date
     conv.sort(key=lambda m: m['date'])
@@ -239,7 +272,10 @@ def get_conversation(other_email:str)->List[Message]:
 
 
 
-def send_email(lead_email, bussiness_name, message, subject=""):
+def send_email(lead_email, bussiness_name, message, subject="", attachments=None):
+    """Send a reply to a lead. `attachments` is an optional list of
+    {filename, content_type, data} dicts where `data` is base64-encoded bytes
+    (e.g. an image edited in the chat composer)."""
     if not getattr(settings, 'EMAIL_SENDING', True):
         print(f"EMAIL_SENDING disabled — skipping email to {lead_email} ({bussiness_name})")
         return
@@ -247,7 +283,8 @@ def send_email(lead_email, bussiness_name, message, subject=""):
     if not lead_email:
         raise Exception("No Email Given")
 
-    if not message:
+    attachments = attachments or []
+    if not message and not attachments:
         raise Exception("No Message Provided")
 
     print("Attempting to send email...")
@@ -258,13 +295,22 @@ def send_email(lead_email, bussiness_name, message, subject=""):
         subject = f"Re: Insurance coverage for {bussiness_name}" if bussiness_name else "Re: Insurance coverage"
 
     try:
-        send_mail(
+        email_msg = EmailMessage(
             subject=subject,
-            message=message,
+            body=message or "",
             from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[lead_email],
-            fail_silently=False
+            to=[lead_email],
         )
+        for att in attachments:
+            raw = att.get("data", "")
+            if not raw:
+                continue
+            email_msg.attach(
+                att.get("filename") or "attachment",
+                base64.b64decode(raw),
+                att.get("content_type") or "application/octet-stream",
+            )
+        email_msg.send(fail_silently=False)
     except Exception as e:
         raise Exception("Failed to send email", str(e))
 

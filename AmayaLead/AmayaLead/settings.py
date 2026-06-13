@@ -181,6 +181,10 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://remedylead.app')
 # send becomes a logged no-op. Defaults to enabled.
 EMAIL_SENDING = os.getenv('EMAIL_SENDING', 'True') == 'True'
 
+# Allow larger request bodies so base64-encoded image attachments in the email
+# chat composer aren't rejected (default is 2.5 MB).
+DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024  # 15 MB
+
 # Rate limiting — tune via env vars without redeploying
 # Gmail free: 500/day. Google Workspace: 2000/day. Stay conservative.
 EMAIL_DAILY_LIMIT = int(os.getenv('EMAIL_DAILY_LIMIT', 400))

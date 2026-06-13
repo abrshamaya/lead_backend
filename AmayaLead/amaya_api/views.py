@@ -498,6 +498,7 @@ def send_email(request):
     place_id = request.data.get("place_id", "")
     message = request.data.get("message","")
     subject = request.data.get("subject", "") or ""
+    attachments = request.data.get("attachments", []) or []
     lead = get_object_or_404(Lead,place_id=place_id)
     lead_emails = [lead['email'] for lead in lead.emails.all().values('email')]
     print("LEAD EMAILS",lead_emails,email_rece)
@@ -505,10 +506,12 @@ def send_email(request):
         return Response({"detail":"No Email given"},status=status.HTTP_400_BAD_REQUEST)
     if email_rece not in lead_emails:
         return Response({"detail":"No Valid Email given"},status=status.HTTP_400_BAD_REQUEST)
+    if not message and not attachments:
+        return Response({"detail":"Nothing to send"},status=status.HTTP_400_BAD_REQUEST)
     try:
 
         from amaya_api.core.email.mail_helper import send_email as send_actual_email
-        send_actual_email(email_rece,lead.name,message,subject=subject)
+        send_actual_email(email_rece,lead.name,message,subject=subject,attachments=attachments)
         # Marking the lead as emailed makes a manually-started conversation
         # show up in the email chat sidebar (which lists email_sent leads).
         if not lead.email_sent:
