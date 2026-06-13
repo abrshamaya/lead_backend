@@ -42,10 +42,11 @@
         <tr>
           <td style="padding:18px 32px;background:#f7f9fb;border-top:1px solid #e6e8eb;color:#6b7280;font-size:12px;line-height:1.5;">
             <strong style="color:#174275;">{{ company_name }}</strong><br>
-            {{ company_address }}<br>
-            Phone: <a href="tel:{{ phone }}" style="color:#174275;text-decoration:none;">{{ phone }}</a> ·
-            Email: <a href="mailto:{{ email }}" style="color:#174275;text-decoration:none;">{{ email }}</a>
-            {% if unsubscribe_url %}<br><a href="{{ unsubscribe_url }}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a>{% endif %}
+            {{ address_line1 }}<br>
+            {{ address_line2 }}<br>
+            Telephone: <a href="tel:{{ phone }}" style="color:#174275;text-decoration:none;">{{ phone }}</a><br>
+            <a href="mailto:{{ email }}" style="color:#174275;text-decoration:none;">{{ email }}</a>
+            {% if unsubscribe_url %}<br><br><a href="{{ unsubscribe_url }}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a>{% endif %}
           </td>
         </tr>
       </table>

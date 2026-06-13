@@ -20,6 +20,8 @@ def brand_context() -> dict:
     return {
         "company_name": "Mahfuz Insurance Agency",
         "company_address": "6000 Stevenson Ave suite 303, Alexandria VA 22304",
+        "address_line1": "6000 Stevenson Ave suite 303",
+        "address_line2": "Alexandria VA 22304",
         "phone": "703-212-9131",
         "email": "mummedm@mahfuzinsagency.com",
         "logo_url": f"{base}/static/email/mahfuz-logo.png",

@@ -2,6 +2,7 @@
 
 --
 {{ company_name }}
-{{ company_address }}
-Phone: {{ phone }}
-Email: {{ email }}
+{{ address_line1 }}
+{{ address_line2 }}
+Telephone: {{ phone }}
+{{ email }}
