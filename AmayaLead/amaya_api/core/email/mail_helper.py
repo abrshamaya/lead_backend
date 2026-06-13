@@ -11,6 +11,10 @@ from email.utils import parsedate_to_datetime, parseaddr
 def send_mail_to_lead(lead_email, business_name):
     subject = f"Insurance coverage for {business_name}"
 
+    if not getattr(settings, 'EMAIL_SENDING', True):
+        print(f"EMAIL_SENDING disabled — skipping email to {lead_email} ({business_name})")
+        return
+
     if not lead_email:
         raise Exception("No Email Given")
 
@@ -236,6 +240,10 @@ def get_conversation(other_email:str)->List[Message]:
 
 
 def send_email(lead_email, bussiness_name, message, subject=""):
+    if not getattr(settings, 'EMAIL_SENDING', True):
+        print(f"EMAIL_SENDING disabled — skipping email to {lead_email} ({bussiness_name})")
+        return
+
     if not lead_email:
         raise Exception("No Email Given")
 

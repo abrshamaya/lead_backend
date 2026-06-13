@@ -176,6 +176,11 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 # Public URL of the frontend — used in password-reset emails
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://remedylead.app')
 
+# Master switch for outbound lead emails. Set EMAIL_SENDING=False in the env to
+# disable all outreach email sending (manual, bulk, AI replies, scheduled) — the
+# send becomes a logged no-op. Defaults to enabled.
+EMAIL_SENDING = os.getenv('EMAIL_SENDING', 'True') == 'True'
+
 # Rate limiting — tune via env vars without redeploying
 # Gmail free: 500/day. Google Workspace: 2000/day. Stay conservative.
 EMAIL_DAILY_LIMIT = int(os.getenv('EMAIL_DAILY_LIMIT', 400))
