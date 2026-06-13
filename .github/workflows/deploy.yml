@@ -50,7 +50,7 @@ jobs:
             mv _env_staging/django.env AmayaLead/.env
             mv _env_staging/scraper.env FastAPI/.env
             rmdir _env_staging 2>/dev/null || true
-            docker compose build
-            docker compose up -d
+            docker compose build --no-cache
+            docker compose up -d --force-recreate
             docker image prune -f
             docker compose ps
