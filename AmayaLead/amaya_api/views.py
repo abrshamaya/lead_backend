@@ -16,7 +16,7 @@ from datetime import timedelta
 from django.utils import timezone
 from django_q.tasks import async_task,schedule
 from amaya_api.core.email.mail_helper import send_mail_to_lead,send_email
-from amaya_api.core.calls.call_helper import get_audio, sync_conversation_statuses
+from amaya_api.core.calls.call_helper import get_audio, sync_conversation_statuses, get_conversation_transcript
 from .core.tasks.task import fetch_and_scrape_task
 from rest_framework.response import Response
 from django.forms.models import model_to_dict
@@ -872,6 +872,21 @@ def get_lead_call_conversation_audio(request):
         )
     else:
         return HttpResponseBadRequest("conversation_id is invalid")
+
+
+@api_view(['GET'])
+def get_lead_call_conversation_transcript(request):
+    """Returns the ElevenLabs transcript turns for a single call conversation."""
+    conversation_id = request.query_params.get("conversation_id", "")
+    if not conversation_id:
+        return Response({"error": "conversation_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+    if not CallConversations.objects.filter(conversation_id=conversation_id).exists():
+        return Response({"error": "conversation_id is invalid"}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        transcript = get_conversation_transcript(conversation_id)
+    except Exception as e:
+        return Response({"error": f"Failed to fetch transcript: {e}"}, status=status.HTTP_502_BAD_GATEWAY)
+    return Response({"transcript": transcript})
 
 @api_view(['POST'])
 @parser_classes([JSONParser])

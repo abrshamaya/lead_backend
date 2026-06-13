@@ -146,3 +146,27 @@ def get_conversation_status(conversation_id: str):
     )
     print(f"[call] status for {conversation_id}: {res.status}")
     return res.status or ""
+
+
+def get_conversation_transcript(conversation_id: str):
+    """Return the call transcript as a list of {role, message, time_in_call_secs}
+    turns. Roles are normalised to 'agent' / 'user'. Empty turns are skipped."""
+    res = client.conversational_ai.conversations.get(
+        conversation_id=conversation_id
+    )
+    turns = []
+    for turn in (getattr(res, "transcript", None) or []):
+        # SDK returns objects; fall back to dict access just in case.
+        role = getattr(turn, "role", None) or (turn.get("role") if isinstance(turn, dict) else "")
+        message = getattr(turn, "message", None) or (turn.get("message") if isinstance(turn, dict) else "")
+        secs = getattr(turn, "time_in_call_secs", None)
+        if secs is None and isinstance(turn, dict):
+            secs = turn.get("time_in_call_secs")
+        if not message:
+            continue
+        turns.append({
+            "role": "agent" if role == "agent" else "user",
+            "message": message,
+            "time_in_call_secs": secs,
+        })
+    return turns
