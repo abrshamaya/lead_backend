@@ -57,26 +57,36 @@ def fetch_places_by_query_via_apify(search_term: str, state: str = "",county:str
     if not search_term.strip():
         raise ValueError("search_term cannot be empty")
     
-    # Build search strings array
-    search_strings = []
-    if search_term and zipcode:
-        search_strings.append(f"{search_term} {zipcode}".strip())
-    if search_term and state:
-        search_strings.append(f"{search_term} {state}".strip())
-    if not search_strings:
-        # Fallback to just the term to avoid empty actor run
-        search_strings = [search_term.strip()]
-    
-    # Remove duplicates while preserving order
-    search_strings = list(dict.fromkeys(search_strings))
-    
+    # The compass/crawler-google-places actor returns far more results when the
+    # business term and the location are passed SEPARATELY — the term goes in
+    # searchStringsArray and the area goes in locationQuery, which the actor
+    # geocodes and tiles to collect up to maxCrawledPlacesPerSearch. Gluing the
+    # state onto the term (e.g. "restaurant Virginia") makes Google treat it as a
+    # single loose text search and return only a handful of results.
+    search_strings = [search_term.strip()]
+
+    # Build the location string from the most specific parts available.
+    location_parts = []
+    if county:
+        location_parts.append(f"{county} County")
+    if state:
+        location_parts.append(state)
+    location_query = ", ".join(location_parts)
+    if location_query:
+        location_query = f"{location_query}, USA"
+    # A bare ZIP geocodes reliably on its own and is more specific than a state.
+    if zipcode:
+        location_query = f"{zipcode}, USA"
+
     payload = {
         "searchStringsArray": search_strings,
         "maxCrawledPlacesPerSearch": int(limit),
         "language": "en",
     }
-    
-    logger.info(f"Starting Apify run with search strings: {search_strings}, limit: {limit}")
+    if location_query:
+        payload["locationQuery"] = location_query
+
+    logger.info(f"Starting Apify run with search: {search_strings}, location: '{location_query}', limit: {limit}")
     
     try:
         # 1) Start run
