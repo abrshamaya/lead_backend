@@ -538,6 +538,7 @@ def _template_dict(t):
         'category': t.category,
         'subject': t.subject,
         'body': t.body,
+        'images': t.images or [],
         'created_at': t.created_at,
         'updated_at': t.updated_at,
     }
@@ -559,11 +560,16 @@ def templates(request):
     if category not in EmailTemplate.Category.values:
         category = EmailTemplate.Category.GENERAL
 
+    images = request.data.get('images', [])
+    if not isinstance(images, list):
+        images = []
+
     t = EmailTemplate.objects.create(
         name=name,
         category=category,
         subject=request.data.get('subject', '') or '',
         body=body,
+        images=images,
     )
     return Response(_template_dict(t), status=status.HTTP_201_CREATED)
 
@@ -588,6 +594,8 @@ def template_detail(request, template_id):
         t.subject = request.data['subject'] or ''
     if 'category' in request.data and request.data['category'] in EmailTemplate.Category.values:
         t.category = request.data['category']
+    if 'images' in request.data and isinstance(request.data['images'], list):
+        t.images = request.data['images']
     t.save()
     return Response(_template_dict(t))
 @api_view(['POST'])

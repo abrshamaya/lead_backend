@@ -90,6 +90,9 @@ class EmailTemplate(models.Model):
     category   = models.CharField(max_length=64, choices=Category.choices, default=Category.GENERAL)
     subject    = models.CharField(max_length=512, blank=True, default='')
     body       = models.TextField()
+    # List of {filename, content_type, data(base64)} attached images that are
+    # inserted into the composer (and sent) whenever the template is used.
+    images     = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
